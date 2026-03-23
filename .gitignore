@@ -1,0 +1,15 @@
+# Scenario generation module — data files
+scenario_generation/dataset/raw/
+scenario_generation/dataset/inputs/
+scenario_generation/dataset/training_data.jsonl
+scenario_generation/dataset/training_data_review.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+
+# Environment variables (NEVER commit your API key)
+.env
+*.env
