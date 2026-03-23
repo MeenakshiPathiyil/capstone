@@ -37,5 +37,10 @@ This document defines the normalized data format produced by the parser and cons
 | Role           | iam_role         |
 | SecurityGroup  | security_group   |
 
+## How to run with Dummy Data
+```
+python -m tests.test_infra
+```
+
 
 
