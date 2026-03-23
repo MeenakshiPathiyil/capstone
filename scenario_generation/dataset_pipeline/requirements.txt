@@ -1,0 +1,23 @@
+# Dataset Pipeline — Requirements & Setup Guide
+# ─────────────────────────────────────────────────────────────────────────────
+# Put these scripts in your capstone repo under: capstone/dataset_pipeline/
+#
+# Folder structure to create in your repo:
+#
+# capstone/
+# ├── dataset_pipeline/
+# │   ├── parse_stix.py          ← Step 1: STIX → structured inputs
+# │   ├── generate_outputs.py    ← Step 2: inputs → tri-modal training data
+# │   ├── requirements.txt       ← this file
+# │   └── README.md
+# ├── dataset/
+# │   ├── raw/                   ← put enterprise-attack-18.1.json here
+# │   ├── inputs/                ← output of Step 1 (auto-created)
+# │   │   ├── individual/        ← one JSON per campaign/group
+# │   │   ├── training_inputs.jsonl
+# │   │   └── summary.json
+# │   └── training_data.jsonl    ← final fine-tuning dataset (output of Step 2)
+# └── fine_tuning/
+#     └── fine_tune.py           ← Step 3 (next sprint)
+
+anthropic>=0.49.0
