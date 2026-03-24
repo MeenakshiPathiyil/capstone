@@ -1,4 +1,5 @@
 import yaml
+import json
 
 with open("../sample_yamls/archetype1_a.yml", "r") as file:
     data = yaml.safe_load(file)
@@ -24,8 +25,7 @@ for resource_name, resource_data in data["Resources"].items():
 
 KNOWN_FIELD_SEMANTICS = {
     "PublicIp": "exposure",
-    "Ingress": "exposure",
-    "SecurityGroup": "exposure",
+    "SecurityGroup": "network_control",
     "ConnectsTo": "connection",
     "IAMRole": "identity",
     "Permissions": "capability",
@@ -41,8 +41,38 @@ SEMANTIC_KEYWORDS = {
     "connection": ["connect", "link", "peer"]
 }
 
-def infer_semantic_category(field_name):
+def infer_semantic_category(field_name, resource_type, value):
     field_lower = field_name.lower()
+    resource_lower = resource_type.lower()
+
+    # Step 1: context-aware special rules FIRST
+
+    if field_name == "InternetGatewayId":
+        if "ec2::instance" in resource_lower:
+            return "connection"
+
+    if field_name == "Ingress":
+        if isinstance(value, list):
+            for rule in value:
+                source = rule.get("Source")
+
+                if source == "0.0.0.0/0":
+                    return "exposure"
+
+                elif source.startswith("10.") or source.startswith("192.168") or source.startswith("172."):
+                    return "connection"
+
+    if field_name == "Sensitive":
+        if value is True:
+            return "impact"
+
+    # Step 2: resource-type-aware refinement
+
+    if "iam" in resource_lower:
+        if "role" in field_lower or "permission" in field_lower:
+            return "capability"
+
+    # Step 3: generic keyword inference LAST
 
     for category, keywords in SEMANTIC_KEYWORDS.items():
         for keyword in keywords:
@@ -51,7 +81,7 @@ def infer_semantic_category(field_name):
 
     return "unknown"
 
-def extract_semantic_properties(properties):
+def extract_semantic_properties(properties, resource_type):
     semantic_properties = {}
 
     for field, value in properties.items():
@@ -60,7 +90,7 @@ def extract_semantic_properties(properties):
             semantic_properties[field] = KNOWN_FIELD_SEMANTICS[field]
 
         else:
-            semantic_properties[field] = infer_semantic_category(field)
+            semantic_properties[field] = infer_semantic_category(field, resource_type, value)
 
     return semantic_properties
 
@@ -69,7 +99,7 @@ normalized_resources = []
 for resource_name, resource_data in data["Resources"].items():
 
     raw_properties = resource_data["Properties"]
-    semantic_properties = extract_semantic_properties(raw_properties)
+    semantic_properties = extract_semantic_properties(raw_properties, resource_data["Type"])
 
     normalized_resources.append({
         "id": resource_name,
@@ -77,18 +107,18 @@ for resource_name, resource_data in data["Resources"].items():
         "raw_properties": raw_properties,
         "semantic_properties": semantic_properties
     })
+print(json.dumps(normalized_resources, indent=2))
+# for resource in normalized_resources:
+#     print("\n--------------------------------")
+#     print(f"Resource ID: {resource['id']}")
+#     print(f"Type: {resource['type']}")
 
-for resource in normalized_resources:
-    print("\n--------------------------------")
-    print(f"Resource ID: {resource['id']}")
-    print(f"Type: {resource['type']}")
+#     print("\nRaw Properties:")
+#     for key, value in resource["raw_properties"].items():
+#         print(f"  {key}: {value}")
 
-    print("\nRaw Properties:")
-    for key, value in resource["raw_properties"].items():
-        print(f"  {key}: {value}")
+#     print("\nSemantic Properties:")
+#     for key, value in resource["semantic_properties"].items():
+#         print(f"  {key} → {value}")
 
-    print("\nSemantic Properties:")
-    for key, value in resource["semantic_properties"].items():
-        print(f"  {key} → {value}")
-
-    print("--------------------------------")
+#     print("--------------------------------")
