@@ -1,0 +1,27 @@
+[
+    {
+        "id": "WebServer",
+        "type": "AWS::EC2::Instance",
+        "properties": {
+            "public": true,
+            "iam_role": "WebRole",
+            "security_group": "WebSG"
+        },
+        "connections": [
+            "WebRole",
+            "WebSG"
+        ]
+    },
+    {
+        "id": "WebRole",
+        "type": "AWS::IAM::Role",
+        "properties": {},
+        "connections": []
+    },
+    {
+        "id": "WebSG",
+        "type": "AWS::EC2::SecurityGroup",
+        "properties": {},
+        "connections": []
+    }
+]
