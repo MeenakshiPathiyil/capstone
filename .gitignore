@@ -17,3 +17,5 @@ __pycache__/
 .env
 *.env.venv
 scenario_generation/.venv/
+scenario_generation/fine_tuning/output/*.safetensors
+scenario_generation/fine_tuning/output/*.bin
