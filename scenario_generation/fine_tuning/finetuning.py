@@ -135,11 +135,12 @@ def load_model_and_tokenizer(model_name: str):
     print(f"    This downloads ~14GB on first run. Subsequent runs use cache.")
 
     bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_compute_dtype=torch.float32,
+    bnb_4bit_quant_storage=torch.float32,
+)
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
@@ -209,6 +210,8 @@ def attach_lora(model):
 # ── Training ──────────────────────────────────────────────────────────────────
 
 def train(model, tokenizer, dataset_split, output_dir: str):
+    import os
+    os.environ["ACCELERATE_MIXED_PRECISION"] = "fp16"
     """
     Run the supervised fine-tuning loop using SFTTrainer.
 
@@ -230,25 +233,23 @@ def train(model, tokenizer, dataset_split, output_dir: str):
       logging_steps=10   : print loss every 10 steps
     """
     sft_config = SFTConfig(
-        output_dir=output_dir,
-        num_train_epochs=3,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        optim="paged_adamw_32bit",      # memory-efficient optimizer for QLoRA
-        learning_rate=2e-4,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
-        fp16=True,
-        logging_steps=10,
-        save_steps=25,
-        save_total_limit=2,             # keep only 2 checkpoints to save disk space
-        evaluation_strategy="steps",
-        eval_steps=25,
-        load_best_model_at_end=True,
-        report_to="none",               # set to "wandb" if you want experiment tracking
-        max_seq_length=MAX_SEQ_LEN,
-        dataset_text_field="text",
-        packing=False,                  # don't pack examples (dataset is small)
+    output_dir=output_dir,
+    num_train_epochs=3,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=4,
+    optim="adamw_torch",
+    learning_rate=2e-4,
+    lr_scheduler_type="cosine",
+    warmup_steps=5,
+    fp16=False,          # turn off entirely
+    bf16=False,          # turn off entirely
+    logging_steps=10,
+    save_steps=25,
+    save_total_limit=2,
+    report_to="none",
+    dataset_text_field="text",
+    packing=False,
+    max_grad_norm=0.3,
     )
 
     # TRL changed this parameter name across versions.
