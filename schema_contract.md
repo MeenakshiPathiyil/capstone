@@ -17,25 +17,15 @@ This document defines the normalized data format produced by the parser and cons
 | type       | string     | Yes      | Cloud resource type             |
 | properties | dictionary | Yes      | Normalized key-value attributes |
 
-## Allowed Properties (v1.0)
-```
-{
-  "public": "boolean",
-  "iam_role": "string",
-  "security_group": "string",
-  "permissions": "list[string]",
-  "connects_to": "string or list[string]",
-  "sensitive": "boolean"
-}
-```
 ## Normalization Rules
-| Raw YAML Field | Normalized Field |
-| -------------- | ---------------- |
-| PublicIp       | public           |
-| Public         | public           |
-| IAMRole        | iam_role         |
-| Role           | iam_role         |
-| SecurityGroup  | security_group   |
+exposure
+network_control
+identity
+capability
+trust
+impact
+connection
+unknown
 
 ## How to run with Dummy Data
 ```
