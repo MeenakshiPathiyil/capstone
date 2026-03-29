@@ -1,4 +1,4 @@
-# Schema Contract – Normalized Resource Format (v1.0)
+# Schema Contract – Normalized Resource Format (v3.0)
 This document defines the normalized data format produced by the parser and consumed by the infrastructure modeling module. It ensures consistency, enables parallel development, and prevents integration issues.
 
 YAML
@@ -107,7 +107,7 @@ SEMANTIC_CATEGORIES = [
 ]
 ```
 
-## How to run v2.0
+## How to run v3.0
 ```
 python3 infra_parser.py
 
