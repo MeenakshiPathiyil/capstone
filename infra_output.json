@@ -1,27 +1,204 @@
 [
+  [
     {
-        "id": "WebServer",
-        "type": "AWS::EC2::Instance",
-        "properties": {
-            "public": true,
-            "iam_role": "WebRole",
-            "security_group": "WebSG"
+      "id": "ECSCluster",
+      "type": "AWS::ECS::Cluster",
+      "connections": []
+    },
+    {
+      "id": "EcsSecurityGroup",
+      "type": "AWS::EC2::SecurityGroup",
+      "connections": []
+    },
+    {
+      "id": "EcsSecurityGroupHTTPinbound",
+      "type": "AWS::EC2::SecurityGroupIngress",
+      "connections": [
+        {
+          "target": "EcsSecurityGroup",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "EcsSecurityGroupSSHinbound",
+      "type": "AWS::EC2::SecurityGroupIngress",
+      "connections": [
+        {
+          "target": "EcsSecurityGroup",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "EcsSecurityGroupALBports",
+      "type": "AWS::EC2::SecurityGroupIngress",
+      "connections": [
+        {
+          "target": "EcsSecurityGroup",
+          "type": "connection",
+          "relation": "dependency"
         },
-        "connections": [
-            "WebRole",
-            "WebSG"
-        ]
+        {
+          "target": "EcsSecurityGroup",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
     },
     {
-        "id": "WebRole",
-        "type": "AWS::IAM::Role",
-        "properties": {},
-        "connections": []
+      "id": "LogsKmsKey",
+      "type": "AWS::KMS::Key",
+      "connections": []
     },
     {
-        "id": "WebSG",
-        "type": "AWS::EC2::SecurityGroup",
-        "properties": {},
-        "connections": []
+      "id": "CloudwatchLogsGroup",
+      "type": "AWS::Logs::LogGroup",
+      "connections": []
+    },
+    {
+      "id": "TaskDefinition",
+      "type": "AWS::ECS::TaskDefinition",
+      "connections": [
+        {
+          "target": "CloudwatchLogsGroup",
+          "type": "network_control",
+          "relation": "association"
+        },
+        {
+          "target": "CloudwatchLogsGroup",
+          "type": "network_control",
+          "relation": "association"
+        }
+      ]
+    },
+    {
+      "id": "ECSALB",
+      "type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "connections": [
+        {
+          "target": "EcsSecurityGroup",
+          "type": "network_control",
+          "relation": "association"
+        }
+      ]
+    },
+    {
+      "id": "ALBListener",
+      "type": "AWS::ElasticLoadBalancingV2::Listener",
+      "connections": []
+    },
+    {
+      "id": "ECSALBListenerRule",
+      "type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+      "connections": []
+    },
+    {
+      "id": "ECSTG",
+      "type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "connections": []
+    },
+    {
+      "id": "ECSAutoScalingGroup",
+      "type": "AWS::AutoScaling::AutoScalingGroup",
+      "connections": []
+    },
+    {
+      "id": "ContainerInstances",
+      "type": "AWS::AutoScaling::LaunchConfiguration",
+      "connections": [
+        {
+          "target": "EcsSecurityGroup",
+          "type": "network_control",
+          "relation": "association"
+        },
+        {
+          "target": "EC2InstanceProfile",
+          "type": "identity",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "Service",
+      "type": "AWS::ECS::Service",
+      "connections": [
+        {
+          "target": "ECSTG",
+          "type": "connection",
+          "relation": "dependency"
+        },
+        {
+          "target": "ECSServiceRole",
+          "type": "trust",
+          "relation": "trust"
+        }
+      ]
+    },
+    {
+      "id": "ECSScheduledTask",
+      "type": "AWS::Events::Rule",
+      "connections": [
+        {
+          "target": "TaskDefinition",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "ECSEventRole",
+      "type": "AWS::IAM::Role",
+      "connections": []
+    },
+    {
+      "id": "ECSServiceRole",
+      "type": "AWS::IAM::Role",
+      "connections": []
+    },
+    {
+      "id": "ServiceScalingTarget",
+      "type": "AWS::ApplicationAutoScaling::ScalableTarget",
+      "connections": [
+        {
+          "target": "ECSCluster",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "ServiceScalingPolicy",
+      "type": "AWS::ApplicationAutoScaling::ScalingPolicy",
+      "connections": [
+        {
+          "target": "ServiceScalingTarget",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    },
+    {
+      "id": "ALB500sAlarmScaleUp",
+      "type": "AWS::CloudWatch::Alarm",
+      "connections": []
+    },
+    {
+      "id": "EC2Role",
+      "type": "AWS::IAM::Role",
+      "connections": []
+    },
+    {
+      "id": "AutoscalingRole",
+      "type": "AWS::IAM::Role",
+      "connections": []
+    },
+    {
+      "id": "EC2InstanceProfile",
+      "type": "AWS::IAM::InstanceProfile",
+      "connections": []
     }
+  ]
 ]
