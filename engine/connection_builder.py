@@ -1,30 +1,21 @@
 #imp file
 #this converts the properties to relationships
+from engine.flatten import flatten_dict
+
+ALLOWED_CATEGORIES = ["identity", "network_control", "connection", "trust"]
+
 def build_connections(infra):
     for resource in infra.all_resources():
-        props = resource.properties
+        flat_props = flatten_dict(resource.raw_properties)
+        semantics = resource.semantic_properties
 
-        # IAM Role connection
-        if "iam_role" in props:
-            target = props["iam_role"]
-            if target in infra.resources:
-                resource.add_connection(target)
+        for key, value in flat_props.items():
+            category = semantics.get(key, "unknown")
 
-        # Security Group connection
-        if "security_group" in props:
-            target = props["security_group"]
-            if target in infra.resources:
-                resource.add_connection(target)
+            # Rule 1: Only certain categories create connections
+            if category not in ALLOWED_CATEGORIES:
+                continue
 
-        # Generic connections
-        if "connects_to" in props:
-            targets = props["connects_to"]
-
-            if isinstance(targets, list):
-                for t in targets:
-                    if t in infra.resources:
-                        resource.add_connection(t)
-            else:
-                if targets in infra.resources:
-                    #this prevents invalid connections
-                    resource.add_connection(targets)
+            # Rule 2: Value must match another resource ID
+            if isinstance(value, str) and value in infra.resources:
+                resource.add_connection(value, category)
