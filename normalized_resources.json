@@ -1,0 +1,75 @@
+[
+  {
+    "id": "EC2Instance",
+    "type": "AWS::EC2::Instance",
+    "raw_properties": {
+      "UserData": {
+        "Fn::Join": [
+          "",
+          [
+            "IPAddress=",
+            "IPAddress"
+          ]
+        ]
+      },
+      "InstanceType": "InstanceType",
+      "SubnetId": [
+        0,
+        "Subnets"
+      ],
+      "SecurityGroupIds": [
+        "InstanceSecurityGroup.GroupId"
+      ],
+      "KeyName": "KeyName",
+      "ImageId": "LatestAmiId"
+    },
+    "semantic_properties": {
+      "InstanceType": "unknown",
+      "SubnetId[0]": "connection",
+      "SubnetId[1]": "connection",
+      "SecurityGroupIds[0]": "network_control",
+      "KeyName": "unknown",
+      "ImageId": "unknown"
+    }
+  },
+  {
+    "id": "InstanceSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "raw_properties": {
+      "GroupDescription": "Enable SSH access",
+      "SecurityGroupIngress": [
+        {
+          "IpProtocol": "tcp",
+          "FromPort": "22",
+          "ToPort": "22",
+          "CidrIp": "SSHLocation"
+        }
+      ]
+    },
+    "semantic_properties": {
+      "GroupDescription": "unknown",
+      "SecurityGroupIngress[0].IpProtocol": "network_control",
+      "SecurityGroupIngress[0].FromPort": "network_control",
+      "SecurityGroupIngress[0].ToPort": "network_control",
+      "SecurityGroupIngress[0].CidrIp": "exposure"
+    }
+  },
+  {
+    "id": "IPAddress",
+    "type": "AWS::EC2::EIP",
+    "raw_properties": {},
+    "semantic_properties": {}
+  },
+  {
+    "id": "IPAssoc",
+    "type": "AWS::EC2::EIPAssociation",
+    "raw_properties": {
+      "InstanceId": "EC2Instance",
+      "AllocationId": "IPAddress.AllocationId"
+    },
+    "semantic_properties": {
+      "InstanceId": "connection",
+      "AllocationId": "connection"
+    }
+  }
+]
