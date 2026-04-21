@@ -26,8 +26,40 @@ except ImportError:
     sys.exit(1)
 
 
-JUDGE_MODEL = "gemini-2.5-flash-lite-preview-06-17"
+JUDGE_MODEL = "gemini-2.5-flash"
 MAX_NEW_TOKENS = 1200
+
+
+def normalize_api_key(value: str | None) -> str | None:
+    """Clean key values and ignore empty/unexpanded placeholder inputs."""
+    if value is None:
+        return None
+
+    cleaned = value.strip().strip('"').strip("'")
+    if not cleaned:
+        return None
+
+    # Common notebook placeholder when shell interpolation did not occur.
+    if re.fullmatch(r"\{[A-Za-z_][A-Za-z0-9_]*\}", cleaned):
+        return None
+
+    return cleaned
+
+
+def resolve_api_key(cli_key: str | None) -> str | None:
+    key = normalize_api_key(cli_key)
+    if key:
+        return key
+
+    key = normalize_api_key(os.getenv("GOOGLE_API_KEY"))
+    if key:
+        return key
+
+    key = normalize_api_key(os.getenv("GEMINI_API_KEY"))
+    if key:
+        return key
+
+    return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -186,7 +218,7 @@ def main() -> None:
         if dotenv_path.exists():
             load_dotenv(dotenv_path=dotenv_path, override=False)
 
-        api_key = args.gemini_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        api_key = resolve_api_key(args.gemini_key)
         if not api_key:
             print(
                 "[!] Gemini API key missing. Use --gemini_key/--google_api_key "
