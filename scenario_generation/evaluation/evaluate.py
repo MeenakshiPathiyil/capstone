@@ -62,6 +62,44 @@ def resolve_api_key(cli_key: str | None) -> str | None:
     return None
 
 
+def mask_api_key(key: str) -> str:
+    if len(key) <= 8:
+        return "*" * len(key)
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def build_judge_client(api_key: str):
+    """Create Gemini client using explicit key and avoid env-precedence surprises."""
+    saved_google = os.environ.pop("GOOGLE_API_KEY", None)
+    saved_gemini = os.environ.pop("GEMINI_API_KEY", None)
+    try:
+        return genai.Client(api_key=api_key)
+    finally:
+        if saved_google is not None:
+            os.environ["GOOGLE_API_KEY"] = saved_google
+        if saved_gemini is not None:
+            os.environ["GEMINI_API_KEY"] = saved_gemini
+
+
+def preflight_judge_auth(client) -> None:
+    """Validate Gemini auth before the expensive generation/evaluation loop."""
+    try:
+        response = client.models.generate_content(
+            model=JUDGE_MODEL,
+            contents="Reply with exactly: ok",
+        )
+        if not response or not getattr(response, "text", None):
+            raise ValueError("Empty response during Gemini auth precheck")
+    except Exception as e:
+        msg = str(e)
+        if "API_KEY_INVALID" in msg or "API Key not found" in msg:
+            raise RuntimeError(
+                "Gemini API key was rejected. Ensure GOOGLE_API_KEY is an AI Studio Gemini key "
+                "(not a restricted/non-Gemini key), and verify key restrictions in Google Cloud."
+            ) from e
+        raise
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate base vs fine-tuned model quality")
     parser.add_argument("--base_model", required=True, help="Base model path or HF name")
@@ -225,6 +263,7 @@ def main() -> None:
                 "or set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env"
             )
             sys.exit(1)
+        print(f"[+] Resolved Gemini API key: {mask_api_key(api_key)} (len={len(api_key)})")
 
         test_inputs_path = Path(args.test_inputs)
         adapter_path = Path(args.adapter_path)
@@ -262,7 +301,9 @@ def main() -> None:
         finetuned_model.eval()
 
         print("[+] Initializing Gemini judge client")
-        judge_client = genai.Client(api_key=api_key)
+        judge_client = build_judge_client(api_key)
+        print("[+] Running Gemini auth precheck")
+        preflight_judge_auth(judge_client)
 
         per_entry = []
         base_totals = []
