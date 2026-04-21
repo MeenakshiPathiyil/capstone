@@ -32,6 +32,9 @@ except ImportError:
 JUDGE_MODEL = "gemini-2.5-flash-lite"
 MAX_NEW_TOKENS = 1200
 GEMINI_CALL_DELAY = 3   # seconds to wait between each Gemini API call to avoid 429/rate-limit errors
+GEMINI_MAX_RETRIES = 6
+GEMINI_RETRY_BASE_SECONDS = 5
+GEMINI_RETRY_MAX_SECONDS = 60
 
 
 # ─────────────────────────────────────────────
@@ -145,15 +148,53 @@ def build_judge_client(api_key: str):
             os.environ["GEMINI_API_KEY"] = saved_gemini
 
 
+def is_retryable_gemini_error(exc: Exception) -> bool:
+    msg = str(exc).upper()
+    retry_tokens = [
+        "503",
+        "UNAVAILABLE",
+        "429",
+        "RESOURCE_EXHAUSTED",
+        "RATE LIMIT",
+        "TOO MANY REQUESTS",
+    ]
+    return any(token in msg for token in retry_tokens)
+
+
+def gemini_generate_with_retry(client, model: str, contents: str, call_label: str):
+    last_error = None
+    for attempt in range(1, GEMINI_MAX_RETRIES + 1):
+        try:
+            t0 = time.time()
+            response = client.models.generate_content(model=model, contents=contents)
+            elapsed = time.time() - t0
+            return response, elapsed
+        except Exception as e:
+            last_error = e
+            if not is_retryable_gemini_error(e) or attempt == GEMINI_MAX_RETRIES:
+                raise
+
+            wait_s = min(GEMINI_RETRY_BASE_SECONDS * (2 ** (attempt - 1)), GEMINI_RETRY_MAX_SECONDS)
+            log_warn(
+                f"  [gemini] {call_label} failed (attempt {attempt}/{GEMINI_MAX_RETRIES}) "
+                f"with retryable error: {e}. Waiting {wait_s}s then retrying..."
+            )
+            time.sleep(wait_s)
+
+    # Should not be reachable, but keeps static analyzers happy.
+    if last_error is not None:
+        raise last_error
+
+
 def preflight_judge_auth(client) -> None:
     log(f"Sending auth precheck ping to model: {JUDGE_MODEL}")
     try:
-        t0 = time.time()
-        response = client.models.generate_content(
+        response, elapsed = gemini_generate_with_retry(
+            client=client,
             model=JUDGE_MODEL,
             contents="Reply with exactly: ok",
+            call_label="auth precheck",
         )
-        elapsed = time.time() - t0
         if not response or not getattr(response, "text", None):
             raise ValueError("Empty response during Gemini auth precheck")
         log_ok(f"Auth precheck passed in {elapsed:.1f}s — model replied: '{response.text.strip()}'")
@@ -314,9 +355,12 @@ def judge_scenario(client, scenario_text: str, label: str = "output") -> dict:
 
     log(f"  [gemini] Judging: {label} (scenario length: {len(scenario_text)} chars)")
 
-    t0 = time.time()
-    response = client.models.generate_content(model=JUDGE_MODEL, contents=rubric_prompt)
-    elapsed = time.time() - t0
+    response, elapsed = gemini_generate_with_retry(
+        client=client,
+        model=JUDGE_MODEL,
+        contents=rubric_prompt,
+        call_label=f"judge {label}",
+    )
 
     if not response or not getattr(response, "text", None):
         raise ValueError("Empty response from Gemini judge")
