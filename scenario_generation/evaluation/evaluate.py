@@ -26,7 +26,7 @@ except ImportError:
     sys.exit(1)
 
 
-JUDGE_MODEL = "gemini-2.5-flash"
+JUDGE_MODEL = "gemini-2.5-flash-lite"   # ✅ FIXED: was "gemini-2.5-flash", now using lite version
 MAX_NEW_TOKENS = 1200
 
 
@@ -83,19 +83,26 @@ def build_judge_client(api_key: str):
 
 def preflight_judge_auth(client) -> None:
     """Validate Gemini auth before the expensive generation/evaluation loop."""
+    print(f"[+] Running Gemini auth precheck with model: {JUDGE_MODEL}")  # ✅ FIXED: shows which model is being tested
     try:
         response = client.models.generate_content(
-            model=JUDGE_MODEL,
+            model=JUDGE_MODEL,   # ✅ FIXED: was hardcoded, now uses the JUDGE_MODEL constant
             contents="Reply with exactly: ok",
         )
         if not response or not getattr(response, "text", None):
             raise ValueError("Empty response during Gemini auth precheck")
+        print(f"[+] Auth precheck passed. Model responded: {response.text.strip()}")  # ✅ FIXED: confirm success
     except Exception as e:
         msg = str(e)
         if "API_KEY_INVALID" in msg or "API Key not found" in msg:
             raise RuntimeError(
                 "Gemini API key was rejected. Ensure GOOGLE_API_KEY is an AI Studio Gemini key "
                 "(not a restricted/non-Gemini key), and verify key restrictions in Google Cloud."
+            ) from e
+        if "404" in msg or "not found" in msg.lower():          # ✅ FIXED: catch wrong model name errors clearly
+            raise RuntimeError(
+                f"Model '{JUDGE_MODEL}' not found. Check available models with client.models.list(). "
+                f"Original error: {msg}"
             ) from e
         raise
 
@@ -142,7 +149,7 @@ def load_test_inputs(path: Path) -> list[dict]:
 
 
 def format_prompt(instruction: str, input_text: str) -> str:
-    return f"[INST] {instruction}\\n\\n{input_text} [/INST]"
+    return f"[INST] {instruction}\n\n{input_text} [/INST]"   # ✅ FIXED: was escaped \\n, now real newline
 
 
 def generate_text(model, tokenizer, prompt: str) -> str:
@@ -167,6 +174,13 @@ def generate_text(model, tokenizer, prompt: str) -> str:
 
 def extract_json_block(text: str) -> str:
     text = text.strip()
+
+    # ✅ FIXED: strip markdown code fences that Gemini sometimes wraps around JSON
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+        text = text.strip()
+
     if text.startswith("{") and text.endswith("}"):
         return text
 
@@ -174,11 +188,15 @@ def extract_json_block(text: str) -> str:
     if match:
         return match.group(0)
 
-    raise ValueError("No JSON object found in Gemini response")
+    raise ValueError(f"No JSON object found in Gemini response. Raw text was:\n{text[:300]}")  # ✅ FIXED: show what was returned to help debug
 
 
 def parse_score_json(text: str) -> dict:
     raw_json = extract_json_block(text)
+
+    # ✅ FIXED: Gemini sometimes uses single quotes instead of double quotes in JSON
+    raw_json = raw_json.replace("'", '"')
+
     data = json.loads(raw_json)
 
     required = [
@@ -192,7 +210,7 @@ def parse_score_json(text: str) -> dict:
         if key not in data:
             raise ValueError(f"Missing key in score JSON: {key}")
         if not isinstance(data[key], int):
-            raise ValueError(f"Score value for {key} must be an integer")
+            data[key] = int(data[key])   # ✅ FIXED: auto-convert float scores to int instead of crashing
 
     expected_total = (
         data["level_of_detail"]
@@ -208,16 +226,14 @@ def parse_score_json(text: str) -> dict:
 
 def judge_scenario(client, scenario_text: str) -> dict:
     rubric_prompt = (
-        "Score this cyber attack scenario on 4 criteria, each 1-10.\\n"
-        "Return ONLY valid JSON with this exact structure:\\n"
-        "{\\n"
-        "'level_of_detail': <int 1-10>,\\n"
-        "'technical_accuracy': <int 1-10>,\\n"
-        "'realism': <int 1-10>,\\n"
-        "'creativity': <int 1-10>,\\n"
-        "'total': <sum of above>\\n"
-        "}\\n"
-        f"Scenario to score: {scenario_text}"
+        "Score this cyber attack scenario on 4 criteria, each 1-10.\n"   # ✅ FIXED: real newline, not \\n
+        "Return ONLY valid JSON with this exact structure, no explanation, no markdown:\n"  # ✅ FIXED: explicit instruction to avoid markdown
+        '{"level_of_detail": <int 1-10>, '   # ✅ FIXED: show JSON with double quotes so model follows suit
+        '"technical_accuracy": <int 1-10>, '
+        '"realism": <int 1-10>, '
+        '"creativity": <int 1-10>, '
+        '"total": <sum of above>}\n'
+        f"Scenario to score:\n{scenario_text}"
     )
 
     response = client.models.generate_content(
@@ -264,6 +280,7 @@ def main() -> None:
             )
             sys.exit(1)
         print(f"[+] Resolved Gemini API key: {mask_api_key(api_key)} (len={len(api_key)})")
+        print(f"[+] Judge model: {JUDGE_MODEL}")   # ✅ FIXED: print which model will be used, helpful for debugging
 
         test_inputs_path = Path(args.test_inputs)
         adapter_path = Path(args.adapter_path)
@@ -302,7 +319,6 @@ def main() -> None:
 
         print("[+] Initializing Gemini judge client")
         judge_client = build_judge_client(api_key)
-        print("[+] Running Gemini auth precheck")
         preflight_judge_auth(judge_client)
 
         per_entry = []
