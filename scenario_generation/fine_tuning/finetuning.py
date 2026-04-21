@@ -211,7 +211,10 @@ def attach_lora(model):
 
 def train(model, tokenizer, dataset_split, output_dir: str):
     import os
-    os.environ["ACCELERATE_MIXED_PRECISION"] = "fp16"
+    # Force full precision in Accelerate to avoid BF16/GradScaler
+    # incompatibilities on Colab T4 environments.
+    os.environ["ACCELERATE_MIXED_PRECISION"] = "no"
+    os.environ["ACCELERATE_DTYPE"] = "float32"
     """
     Run the supervised fine-tuning loop using SFTTrainer.
 
@@ -227,8 +230,8 @@ def train(model, tokenizer, dataset_split, output_dir: str):
                                       is small, gradient_accumulation compensates)
       gradient_accumulation_steps=4 : accumulate 4 steps before updating
                                       weights → effective batch size = 4
-      learning_rate=2e-4 : standard for LoRA fine-tuning
-      fp16=True          : mixed precision training (faster on GPU)
+          learning_rate=2e-4 : standard for LoRA fine-tuning
+          fp16=False/bf16=False : full precision for Colab stability
       save_steps=25      : save a checkpoint every 25 steps
       logging_steps=10   : print loss every 10 steps
     """
