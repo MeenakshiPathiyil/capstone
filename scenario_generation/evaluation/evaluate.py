@@ -36,7 +36,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--adapter_path", required=True, help="Path to LoRA adapter output folder")
     parser.add_argument("--test_inputs", required=True, help="Path to test input JSONL (10 entries)")
     parser.add_argument("--out", required=True, help="Path to save evaluation_results.json")
-    parser.add_argument("--gemini_key", default=None, help="Gemini API key (optional if in .env)")
+    parser.add_argument(
+        "--gemini_key",
+        "--google_api_key",
+        dest="gemini_key",
+        default=None,
+        help="Gemini API key (optional if set in GOOGLE_API_KEY or GEMINI_API_KEY)",
+    )
     return parser.parse_args()
 
 
@@ -180,9 +186,12 @@ def main() -> None:
         if dotenv_path.exists():
             load_dotenv(dotenv_path=dotenv_path, override=False)
 
-        api_key = args.gemini_key or os.getenv("GEMINI_API_KEY")
+        api_key = args.gemini_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if not api_key:
-            print("[!] Gemini API key missing. Use --gemini_key or set GEMINI_API_KEY in .env")
+            print(
+                "[!] Gemini API key missing. Use --gemini_key/--google_api_key "
+                "or set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env"
+            )
             sys.exit(1)
 
         test_inputs_path = Path(args.test_inputs)
