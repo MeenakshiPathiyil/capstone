@@ -1,0 +1,8 @@
+# Prompt Generator — inference-only dependencies
+# Install with: pip install -r requirements_promptgen.txt
+
+torch>=2.1.0
+transformers>=4.40.0
+peft>=0.10.0
+bitsandbytes>=0.43.0
+accelerate>=0.28.0
