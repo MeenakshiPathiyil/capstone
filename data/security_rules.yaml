@@ -1,0 +1,101 @@
+- id: RESTRICTED_COMMON_PORTS
+  origin: aws_config
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroup
+  severity: high
+  semantic: exposure
+
+  state:
+    id: unrestricted_common_port_access
+    display_name: Unrestricted Common Port Access
+    summary_template: "Security group allows unrestricted ingress on port {blockedPort1}."
+
+  parameter_schema:
+    - name: blockedPort1
+      type: port
+      required: false
+      default: 3389
+      description: First port that must not be exposed to unrestricted ingress.
+
+    - name: blockedPort2
+      type: port
+      required: false
+      default: 3306
+      description: Second port that must not be exposed to unrestricted ingress.
+
+    - name: blockedPort3
+      type: port
+      required: false
+      default: 5432
+      description: Third port that must not be exposed to unrestricted ingress.
+
+    - name: blockedPort4
+      type: port
+      required: false
+      default: 1433
+      description: Fourth port that must not be exposed to unrestricted ingress.
+
+    - name: blockedPort5
+      type: port
+      required: false
+      default: 6379
+      description: Fifth port that must not be exposed to unrestricted ingress.
+
+  conditions:
+    operator: OR
+    operands:
+
+      - operator: AND
+        operands:
+          - field: SecurityGroupIngress.CidrIp
+            comparison: equals
+            value: "0.0.0.0/0"
+
+          - field: SecurityGroupIngress.FromPort
+            comparison: equals
+            value: "{blockedPort1}"
+
+      - operator: AND
+        operands:
+          - field: SecurityGroupIngress.CidrIp
+            comparison: equals
+            value: "0.0.0.0/0"
+
+          - field: SecurityGroupIngress.FromPort
+            comparison: equals
+            value: "{blockedPort2}"
+
+      - operator: AND
+        operands:
+          - field: SecurityGroupIngress.CidrIp
+            comparison: equals
+            value: "0.0.0.0/0"
+
+          - field: SecurityGroupIngress.FromPort
+            comparison: equals
+            value: "{blockedPort3}"
+
+      - operator: AND
+        operands:
+          - field: SecurityGroupIngress.CidrIp
+            comparison: equals
+            value: "0.0.0.0/0"
+
+          - field: SecurityGroupIngress.FromPort
+            comparison: equals
+            value: "{blockedPort4}"
+
+      - operator: AND
+        operands:
+          - field: SecurityGroupIngress.CidrIp
+            comparison: equals
+            value: "0.0.0.0/0"
+
+          - field: SecurityGroupIngress.FromPort
+            comparison: equals
+            value: "{blockedPort5}"
+
+  references:
+    - source: aws_config
+      id: RESTRICTED_COMMON_PORTS
+      url: "https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html"
