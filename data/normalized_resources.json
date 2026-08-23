@@ -1,0 +1,172 @@
+[
+  {
+    "id": "InsecureS3Bucket",
+    "type": "AWS::S3::Bucket",
+    "raw_properties": {
+      "BucketName": "insecure-public-bucket-demo",
+      "AccessControl": "PublicRead"
+    },
+    "semantic_properties": {
+      "BucketName": "unknown",
+      "AccessControl": "unknown"
+    }
+  },
+  {
+    "id": "PublicBucketPolicy",
+    "type": "AWS::S3::BucketPolicy",
+    "raw_properties": {
+      "Bucket": "InsecureS3Bucket",
+      "PolicyDocument": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": "*"
+          }
+        ]
+      }
+    },
+    "semantic_properties": {
+      "Bucket": "unknown",
+      "PolicyDocument.Statement[0].Effect": "capability",
+      "PolicyDocument.Statement[0].Principal": "capability",
+      "PolicyDocument.Statement[0].Action": "capability",
+      "PolicyDocument.Statement[0].Resource": "capability"
+    }
+  },
+  {
+    "id": "OpenSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "raw_properties": {
+      "GroupDescription": "Open to the world",
+      "SecurityGroupIngress": [
+        {
+          "IpProtocol": "tcp",
+          "FromPort": 22,
+          "ToPort": 22,
+          "CidrIp": "0.0.0.0/0"
+        },
+        {
+          "IpProtocol": "tcp",
+          "FromPort": 3389,
+          "ToPort": 3389,
+          "CidrIp": "0.0.0.0/0"
+        }
+      ]
+    },
+    "semantic_properties": {
+      "GroupDescription": "unknown",
+      "SecurityGroupIngress[0].IpProtocol": "network_control",
+      "SecurityGroupIngress[0].FromPort": "network_control",
+      "SecurityGroupIngress[0].ToPort": "network_control",
+      "SecurityGroupIngress[0].CidrIp": "exposure",
+      "SecurityGroupIngress[1].IpProtocol": "network_control",
+      "SecurityGroupIngress[1].FromPort": "network_control",
+      "SecurityGroupIngress[1].ToPort": "network_control",
+      "SecurityGroupIngress[1].CidrIp": "exposure"
+    }
+  },
+  {
+    "id": "PublicEC2Instance",
+    "type": "AWS::EC2::Instance",
+    "raw_properties": {
+      "ImageId": "ami-0abcdef1234567890",
+      "InstanceType": "t2.micro",
+      "SecurityGroupIds": [
+        "OpenSecurityGroup"
+      ],
+      "AssociatePublicIpAddress": true
+    },
+    "semantic_properties": {
+      "ImageId": "unknown",
+      "InstanceType": "unknown",
+      "SecurityGroupIds[0]": "network_control",
+      "AssociatePublicIpAddress": "exposure"
+    }
+  },
+  {
+    "id": "OverPermissiveRole",
+    "type": "AWS::IAM::Role",
+    "raw_properties": {
+      "RoleName": "overly-permissive-role",
+      "AssumeRolePolicyDocument": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "*"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "admin-access",
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": "*",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "semantic_properties": {
+      "RoleName": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Effect": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Principal.Service": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyName": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Effect": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Resource": "capability"
+    }
+  },
+  {
+    "id": "PublicRDS",
+    "type": "AWS::RDS::DBInstance",
+    "raw_properties": {
+      "DBInstanceIdentifier": "insecure-db",
+      "AllocatedStorage": 20,
+      "DBInstanceClass": "db.t3.micro",
+      "Engine": "mysql",
+      "MasterUsername": "admin",
+      "MasterUserPassword": "password123",
+      "PubliclyAccessible": true
+    },
+    "semantic_properties": {
+      "DBInstanceIdentifier": "unknown",
+      "AllocatedStorage": "unknown",
+      "DBInstanceClass": "unknown",
+      "Engine": "unknown",
+      "MasterUsername": "unknown",
+      "MasterUserPassword": "unknown",
+      "PubliclyAccessible": "exposure"
+    }
+  },
+  {
+    "id": "OpenLoadBalancer",
+    "type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "raw_properties": {
+      "Name": "open-lb",
+      "Scheme": "internet-facing",
+      "Type": "application",
+      "Subnets": [
+        "subnet-12345678",
+        "subnet-87654321"
+      ]
+    },
+    "semantic_properties": {
+      "Name": "unknown",
+      "Scheme": "exposure",
+      "Type": "unknown",
+      "Subnets[0]": "unknown",
+      "Subnets[1]": "unknown"
+    }
+  }
+]

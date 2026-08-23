@@ -1,0 +1,30 @@
+[
+  [
+    {
+      "id": "EC2Instance",
+      "type": "AWS::EC2::Instance",
+      "connections": []
+    },
+    {
+      "id": "InstanceSecurityGroup",
+      "type": "AWS::EC2::SecurityGroup",
+      "connections": []
+    },
+    {
+      "id": "IPAddress",
+      "type": "AWS::EC2::EIP",
+      "connections": []
+    },
+    {
+      "id": "IPAssoc",
+      "type": "AWS::EC2::EIPAssociation",
+      "connections": [
+        {
+          "target": "EC2Instance",
+          "type": "connection",
+          "relation": "dependency"
+        }
+      ]
+    }
+  ]
+]

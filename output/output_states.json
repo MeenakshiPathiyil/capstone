@@ -1,0 +1,9 @@
+[
+  {
+    "resource": "OpenSecurityGroup",
+    "rule_id": "RESTRICTED_COMMON_PORTS",
+    "state": "unrestricted_common_port_access",
+    "semantic": "exposure",
+    "severity": "high"
+  }
+]
