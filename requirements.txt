@@ -1,0 +1,6 @@
+# runtime
+# rule engine parses data/security_rules.yaml
+PyYAML
+
+# tests only
+pytest

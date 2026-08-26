@@ -1,45 +1,408 @@
-- id: RESTRICTED_COMMON_PORTS
+# Security rules.
+#
+# ORIGIN:
+# Rules 1-11 are the canonical ruleset (~/Downloads/canonical_rules.yaml, owned by
+# Meenakshi, derived from AWS Config managed rules). Their `id`, `source_id`,
+# `semantic`, `state`, `summary`, `conditions`, `parameters` and `references` are
+# hers. Where this file departs from that source the deviation is written next to
+# the rule under `deviations:`, so a reviewer sees the change without diffing two
+# files.
+#
+# Rules 12-16 are ours. They have no canonical equivalent and they are what makes
+# an attack *path* findable rather than a list of unrelated findings. See the
+# section header before rule 12.
+#
+# WHAT THIS FILE DELIBERATELY DOES NOT CARRY:
+# `severity`. The canonical rules do not declare one, and inventing a number per
+# rule is a judgement we cannot defend rule by rule. graph/path_finder derives it
+# from `semantic` through one documented table (SEVERITY_BY_SEMANTIC), so there is
+# a single place to change when the risk scoring model is built.
+#
+# `attack_techniques` IS carried, because those are MITRE ATT&CK IDs cited from
+# the public IaaS matrix rather than numbers we chose. Every ID here must exist in
+# data/attack_techniques.yaml with the matrix's own name for it, which
+# tests/test_security_rules.py enforces.
+#
+# THE FIELD NAMES ARE ABSTRACT, NOT CLOUDFORMATION:
+# `ingress.port`, `bucket.name`, `BucketPolicy.AllowsPublicRead` and the rest are
+# projected from raw template properties by processing/attributes.py. A rule
+# written against `SecurityGroupIngress[0].FromPort` would only work on
+# CloudFormation and would need a second copy for the standalone
+# AWS::EC2::SecurityGroupIngress spelling of the same fact.
+
+
+# ==============================================================================
+# CANONICAL RULES
+# ==============================================================================
+
+- id: aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup
   origin: aws_config
+  source_id: RESTRICTED_INCOMING_TRAFFIC
   service: ec2
   resource_type: AWS::EC2::SecurityGroup
-  severity: high
-  semantic: exposure
+  semantic: network_control
 
   state:
     id: unrestricted_common_port_access
-    display_name: Unrestricted Common Port Access
-    summary_template: "Security group allows unrestricted ingress on port {blockedPort1}."
+    display_name: Security group allows unrestricted traffic to a blocked port
 
-  parameter_schema:
-    - name: blockedPort1
-      type: port
-      required: false
-      default: 3389
-      description: First port that must not be exposed to unrestricted ingress.
+  summary: >
+    Security group allows unrestricted incoming traffic to a port that should
+    never be reachable from the internet.
 
-    - name: blockedPort2
-      type: port
-      required: false
-      default: 3306
-      description: Second port that must not be exposed to unrestricted ingress.
+  # THE DEVIATION, AND WHY IT MATTERS:
+  # The canonical rule has protocol, port and cidr as three sibling leaves under
+  # one AND. Each leaf resolves against *every* ingress entry independently, so a
+  # group holding `tcp/443/0.0.0.0/0` and `tcp/3306/10.0.0.0/8` matched: protocol
+  # and CIDR came from the first entry, the port from the second. Neither entry is
+  # a problem and the rule fired anyway.
+  #
+  # `scope: ingress` evaluates the subtree once per ingress entry and ORs the
+  # results, so all three conditions have to hold on the *same* entry.
+  deviations:
+    - "added `scope: ingress`, so the three conditions must hold on one ingress
+       entry rather than being satisfied across different entries"
 
-    - name: blockedPort3
-      type: port
-      required: false
-      default: 5432
-      description: Third port that must not be exposed to unrestricted ingress.
+  conditions:
+    scope: ingress
+    operator: AND
+    operands:
 
-    - name: blockedPort4
-      type: port
-      required: false
-      default: 1433
-      description: Fourth port that must not be exposed to unrestricted ingress.
+      - field: protocol
+        comparison: equals
+        value: tcp
 
-    - name: blockedPort5
-      type: port
-      required: false
-      default: 6379
-      description: Fifth port that must not be exposed to unrestricted ingress.
+      - operator: OR
+        operands:
+          - field: port
+            comparison: equals
+            value: "{blockedPort1}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort2}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort3}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort4}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort5}"
+
+      - operator: OR
+        operands:
+          - field: cidr
+            comparison: equals
+            value: 0.0.0.0/0
+          - field: cidr
+            comparison: equals
+            value: "::/0"
+
+  parameters:
+    blockedPort1: 20
+    blockedPort2: 21
+    blockedPort3: 3389
+    blockedPort4: 3306
+    blockedPort5: 4333
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1021
+      name: Remote Services
+
+  references:
+    - source: aws_config
+      id: RESTRICTED_INCOMING_TRAFFIC
+      url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html
+
+
+- id: aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup
+  origin: aws_config
+  source_id: INCOMING_SSH_DISABLED
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroup
+  semantic: network_control
+
+  state:
+    id: unrestricted_ssh_access
+    display_name: Security group allows SSH from anywhere
+
+  summary: >
+    Security group allows incoming SSH traffic from any address.
+
+  deviations:
+    - "added `scope: ingress`, for the same reason as RESTRICTED_INCOMING_TRAFFIC:
+       without it the port and the CIDR can be satisfied by two different
+       ingress entries"
+
+  conditions:
+    scope: ingress
+    operator: AND
+    operands:
+
+      - field: port
+        comparison: equals
+        value: 22
+
+      - operator: OR
+        operands:
+          - field: cidr
+            comparison: equals
+            value: 0.0.0.0/0
+          - field: cidr
+            comparison: equals
+            value: "::/0"
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1021.007
+      name: "Remote Services: Cloud Services"
+
+  references:
+    - source: aws_config
+      id: INCOMING_SSH_DISABLED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-ssh.html
+
+
+# The same two network rules again, for the standalone spelling.
+#
+# WHY THESE EXIST:
+# The rule engine indexes rules by `resource_type`, and the two rules above are
+# AWS::EC2::SecurityGroup only. An inbound rule declared as its own
+# AWS::EC2::SecurityGroupIngress resource therefore had no rule looking at it,
+# and real templates use that shape constantly. The projection in
+# processing/attributes.py already turns both spellings into one `ingress` list,
+# so the conditions are identical and only the indexed type differs.
+#
+# Per-type copies rather than one rule with a list of types, because that is the
+# pattern the canonical file already uses for REQUIRED_TAGS.
+
+- id: aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroupIngress
+  origin: aws_config
+  source_id: RESTRICTED_INCOMING_TRAFFIC
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroupIngress
+  semantic: network_control
+
+  state:
+    id: unrestricted_common_port_access
+    display_name: Security group allows unrestricted traffic to a blocked port
+
+  summary: >
+    Standalone security group ingress rule allows unrestricted incoming traffic
+    to a port that should never be reachable from the internet.
+
+  deviations:
+    - "per-type copy. The canonical rule is indexed on AWS::EC2::SecurityGroup
+       only, so the standalone AWS::EC2::SecurityGroupIngress spelling of the
+       same fact was never evaluated"
+    - "added `scope: ingress`, as on the AWS::EC2::SecurityGroup copy"
+
+  conditions:
+    scope: ingress
+    operator: AND
+    operands:
+
+      - field: protocol
+        comparison: equals
+        value: tcp
+
+      - operator: OR
+        operands:
+          - field: port
+            comparison: equals
+            value: "{blockedPort1}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort2}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort3}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort4}"
+          - field: port
+            comparison: equals
+            value: "{blockedPort5}"
+
+      - operator: OR
+        operands:
+          - field: cidr
+            comparison: equals
+            value: 0.0.0.0/0
+          - field: cidr
+            comparison: equals
+            value: "::/0"
+
+  parameters:
+    blockedPort1: 20
+    blockedPort2: 21
+    blockedPort3: 3389
+    blockedPort4: 3306
+    blockedPort5: 4333
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1021
+      name: Remote Services
+
+  references:
+    - source: aws_config
+      id: RESTRICTED_INCOMING_TRAFFIC
+      url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html
+
+
+- id: aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroupIngress
+  origin: aws_config
+  source_id: INCOMING_SSH_DISABLED
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroupIngress
+  semantic: network_control
+
+  state:
+    id: unrestricted_ssh_access
+    display_name: Security group allows SSH from anywhere
+
+  summary: >
+    Standalone security group ingress rule allows incoming SSH traffic from any
+    address.
+
+  deviations:
+    - "per-type copy, for the same reason as the RESTRICTED_INCOMING_TRAFFIC
+       copy above"
+    - "added `scope: ingress`, as on the AWS::EC2::SecurityGroup copy"
+
+  conditions:
+    scope: ingress
+    operator: AND
+    operands:
+
+      - field: port
+        comparison: equals
+        value: 22
+
+      - operator: OR
+        operands:
+          - field: cidr
+            comparison: equals
+            value: 0.0.0.0/0
+          - field: cidr
+            comparison: equals
+            value: "::/0"
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1021.007
+      name: "Remote Services: Cloud Services"
+
+  references:
+    - source: aws_config
+      id: INCOMING_SSH_DISABLED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-ssh.html
+
+
+- id: aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: exposure
+
+  state:
+    id: s3_bucket_public_access_allowed
+    display_name: S3 bucket allows public access
+
+  summary: >
+    S3 bucket allows public access through bucket-level public access settings.
+
+  # Unchanged from canonical. `bucket.name not_in []` is vacuously true and reads
+  # as an exclusion list nobody has filled in, which is what it is: the parameter
+  # `excludedPublicBuckets` is where a bucket that is public on purpose goes.
+  #
+  # The four flags default to false when PublicAccessBlockConfiguration is absent
+  # from the template. That is AWS's own default and it is the insecure one, so
+  # a template that never mentions the block matches this rule. See the
+  # "absence is a finding" note in processing/attributes.py.
+  conditions:
+    operator: AND
+    operands:
+
+      - field: bucket.name
+        comparison: not_in
+        value: "{excludedPublicBuckets}"
+
+      - operator: OR
+        operands:
+          - field: PublicAccessBlockConfiguration.IgnorePublicAcls
+            comparison: equals
+            value: false
+          - field: PublicAccessBlockConfiguration.BlockPublicPolicy
+            comparison: equals
+            value: false
+          - field: PublicAccessBlockConfiguration.BlockPublicAcls
+            comparison: equals
+            value: false
+          - field: PublicAccessBlockConfiguration.RestrictPublicBuckets
+            comparison: equals
+            value: false
+
+  parameters:
+    excludedPublicBuckets: []
+
+  attack_techniques:
+    - id: T1530
+      name: Data from Cloud Storage
+    - id: T1619
+      name: Cloud Storage Object Discovery
+
+  references:
+    - source: aws_config
+      id: S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-level-public-access-prohibited.html
+
+
+- id: aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_PUBLIC_READ_PROHIBITED
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: exposure
+
+  state:
+    id: s3_bucket_public_read_allowed
+    display_name: S3 bucket allows public read access
+
+  summary: >
+    S3 bucket allows public read access through its bucket policy or bucket ACL.
+
+  # THE DEVIATION, AND WHY:
+  # The canonical condition tree is
+  #
+  #   (BlockPublicPolicy == true  OR BucketPolicy.AllowsPublicRead == false)
+  #   AND
+  #   (BlockPublicAcls   == true  OR BucketAcl.AllowsPublicRead    == false)
+  #
+  # which describes a bucket that is locked down. Every other rule in the
+  # canonical file matches the violation, and this rule's own `state` says
+  # "allows public read access", so as written it fired on exactly the buckets
+  # that are safe and stayed silent on the public ones.
+  #
+  # Negated to match its own state name. De Morgan on the tree above gives the
+  # OR of two ANDs below, which reads directly: the bucket is publicly readable
+  # if its policy allows public read and policy blocking is off, or its ACL
+  # allows public read and ACL blocking is off.
+  #
+  # Confirmed with Nisschay before changing it. If the canonical polarity was
+  # intentional, revert this rule and nothing else.
+  deviations:
+    - condition tree negated. The canonical tree matches a compliant bucket
+      while `state` describes a public one, so the rule fired on safe buckets
+      and missed public ones
 
   conditions:
     operator: OR
@@ -47,55 +410,637 @@
 
       - operator: AND
         operands:
-          - field: SecurityGroupIngress.CidrIp
+          - field: BucketPolicy.AllowsPublicRead
             comparison: equals
-            value: "0.0.0.0/0"
-
-          - field: SecurityGroupIngress.FromPort
+            value: true
+          - field: PublicAccessBlockConfiguration.BlockPublicPolicy
             comparison: equals
-            value: "{blockedPort1}"
-
-      - operator: AND
-        operands:
-          - field: SecurityGroupIngress.CidrIp
-            comparison: equals
-            value: "0.0.0.0/0"
-
-          - field: SecurityGroupIngress.FromPort
-            comparison: equals
-            value: "{blockedPort2}"
+            value: false
 
       - operator: AND
         operands:
-          - field: SecurityGroupIngress.CidrIp
+          - field: BucketAcl.AllowsPublicRead
             comparison: equals
-            value: "0.0.0.0/0"
+            value: true
+          - field: PublicAccessBlockConfiguration.BlockPublicAcls
+            comparison: equals
+            value: false
 
-          - field: SecurityGroupIngress.FromPort
-            comparison: equals
-            value: "{blockedPort3}"
-
-      - operator: AND
-        operands:
-          - field: SecurityGroupIngress.CidrIp
-            comparison: equals
-            value: "0.0.0.0/0"
-
-          - field: SecurityGroupIngress.FromPort
-            comparison: equals
-            value: "{blockedPort4}"
-
-      - operator: AND
-        operands:
-          - field: SecurityGroupIngress.CidrIp
-            comparison: equals
-            value: "0.0.0.0/0"
-
-          - field: SecurityGroupIngress.FromPort
-            comparison: equals
-            value: "{blockedPort5}"
+  attack_techniques:
+    - id: T1530
+      name: Data from Cloud Storage
+    - id: T1537
+      name: Transfer Data to Cloud Account
 
   references:
     - source: aws_config
-      id: RESTRICTED_COMMON_PORTS
-      url: "https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html"
+      id: S3_BUCKET_PUBLIC_READ_PROHIBITED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-public-read-prohibited.html
+
+
+- id: aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance
+  origin: aws_config
+  source_id: RDS_STORAGE_ENCRYPTED
+  service: rds
+  resource_type: AWS::RDS::DBInstance
+  semantic: exposure
+
+  state:
+    id: rds_storage_unencrypted
+    display_name: RDS storage is not encrypted
+
+  summary: >
+    RDS DB instance storage is not encrypted.
+
+  conditions:
+    operator: AND
+    operands:
+      - field: StorageEncrypted
+        comparison: equals
+        value: false
+
+  parameters:
+    kmsKeyId: null
+
+  attack_techniques:
+    - id: T1530
+      name: Data from Cloud Storage
+
+  references:
+    - source: aws_config
+      id: RDS_STORAGE_ENCRYPTED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/rds-storage-encrypted.html
+
+
+# REQUIRED_TAGS, three per-type copies.
+#
+# `semantic: capability` is canonical and is left alone. It does mean these
+# findings would otherwise become privilege steps in the path search, because
+# `capability` maps to the authority role there, and a missing cost-centre tag is
+# not an escalation. graph/path_finder excludes them by `source_id`
+# (NON_PATH_SOURCE_IDS), so the finding is still reported and never becomes a hop.
+#
+# Worth knowing when writing the next `capability` rule: unless it is added to
+# that list, it WILL count as the attacker gaining authority.
+
+- id: aws_config:REQUIRED_TAGS:AWS::EC2::Instance
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: ec2
+  resource_type: AWS::EC2::Instance
+  semantic: capability
+
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+
+  summary: >
+    EC2 instance does not contain the required tag 'CostCenter'.
+
+  conditions:
+    operator: NOT
+    operand:
+      field: tags
+      comparison: contains
+      value: "{tag1Key}"
+
+  parameters:
+    tag1Key: CostCenter
+
+  attack_techniques:
+    - id: T1580
+      name: Cloud Infrastructure Discovery
+
+  references:
+    - source: aws_config
+      id: REQUIRED_TAGS
+      url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+
+
+- id: aws_config:REQUIRED_TAGS:AWS::S3::Bucket
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: capability
+
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+
+  summary: >
+    S3 bucket does not contain the required tag 'CostCenter'.
+
+  conditions:
+    operator: NOT
+    operand:
+      field: tags
+      comparison: contains
+      value: "{tag1Key}"
+
+  parameters:
+    tag1Key: CostCenter
+
+  attack_techniques:
+    - id: T1580
+      name: Cloud Infrastructure Discovery
+
+  references:
+    - source: aws_config
+      id: REQUIRED_TAGS
+      url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+
+
+- id: aws_config:REQUIRED_TAGS:AWS::RDS::DBInstance
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: rds
+  resource_type: AWS::RDS::DBInstance
+  semantic: capability
+
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+
+  summary: >
+    RDS DB instance does not contain the required tag 'CostCenter'.
+
+  conditions:
+    operator: NOT
+    operand:
+      field: tags
+      comparison: contains
+      value: "{tag1Key}"
+
+  parameters:
+    tag1Key: CostCenter
+
+  attack_techniques:
+    - id: T1580
+      name: Cloud Infrastructure Discovery
+
+  references:
+    - source: aws_config
+      id: REQUIRED_TAGS
+      url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+
+
+# The three account-scoped rules.
+#
+# `resource_type: account` has no CloudFormation equivalent. A template declares
+# resources, never the account they live in, so the rule engine indexes these
+# under a type no resource ever has and they never fire. They are kept anyway, so
+# this file stays a faithful copy of the canonical set and so the gap is visible
+# rather than being a silent omission somebody re-adds later.
+#
+# To make them fire, an account pseudo-resource would have to be synthesised from
+# outside the template, from AWS Config or an API call. That is real work and a
+# separate piece of it.
+
+- id: aws_config:IAM_PASSWORD_POLICY:account
+  origin: aws_config
+  source_id: IAM_PASSWORD_POLICY
+  service: iam
+  resource_type: account
+  semantic: capability
+
+  state:
+    id: iam_password_policy_weak
+    display_name: IAM password policy does not meet required security settings
+
+  summary: >
+    IAM account password policy does not satisfy the configured password
+    security requirements.
+
+  conditions:
+    operator: OR
+    operands:
+      - field: password_policy.RequireUppercaseCharacters
+        comparison: equals
+        value: false
+      - field: password_policy.RequireLowercaseCharacters
+        comparison: equals
+        value: false
+      - field: password_policy.RequireSymbols
+        comparison: equals
+        value: false
+      - field: password_policy.RequireNumbers
+        comparison: equals
+        value: false
+      - field: password_policy.MinimumPasswordLength
+        comparison: less_than
+        value: 14
+      - field: password_policy.PasswordReusePrevention
+        comparison: less_than
+        value: 24
+      - field: password_policy.MaxPasswordAge
+        comparison: greater_than
+        value: 90
+
+  parameters:
+    RequireUppercaseCharacters: true
+    RequireLowercaseCharacters: true
+    RequireSymbols: true
+    RequireNumbers: true
+    MinimumPasswordLength: 14
+    PasswordReusePrevention: 24
+    MaxPasswordAge: 90
+
+  attack_techniques:
+    - id: T1110
+      name: Brute Force
+    - id: T1201
+      name: Password Policy Discovery
+
+  references:
+    - source: aws_config
+      id: IAM_PASSWORD_POLICY
+      url: https://docs.aws.amazon.com/config/latest/developerguide/iam-password-policy.html
+
+
+- id: aws_config:ROOT_ACCOUNT_MFA_ENABLED:account
+  origin: aws_config
+  source_id: ROOT_ACCOUNT_MFA_ENABLED
+  service: iam
+  resource_type: account
+  semantic: identity
+
+  state:
+    id: root_account_mfa_disabled
+    display_name: Root account does not have MFA enabled
+
+  summary: >
+    Root account does not have multi-factor authentication (MFA) enabled.
+
+  conditions:
+    field: root_account.mfa_enabled
+    comparison: equals
+    value: false
+
+  attack_techniques:
+    - id: T1078
+      name: Valid Accounts
+    - id: T1621
+      name: Multi-Factor Authentication Request Generation
+
+  references:
+    - source: aws_config
+      id: ROOT_ACCOUNT_MFA_ENABLED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/root-account-mfa-enabled.html
+
+
+- id: aws_config:CLOUD_TRAIL_ENABLED:account
+  origin: aws_config
+  source_id: CLOUD_TRAIL_ENABLED
+  service: cloudtrail
+  resource_type: account
+  semantic: impact
+
+  state:
+    id: cloudtrail_not_enabled
+    display_name: AWS CloudTrail is not enabled for the account
+
+  summary: >
+    AWS CloudTrail is not enabled, reducing the account's ability to detect and
+    investigate a security incident.
+
+  conditions:
+    field: cloudtrail.enabled
+    comparison: equals
+    value: false
+
+  attack_techniques:
+    - id: T1685
+      name: Disable or Modify Tools
+    - id: T1654
+      name: Log Enumeration
+
+  references:
+    - source: aws_config
+      id: CLOUD_TRAIL_ENABLED
+      url: https://docs.aws.amazon.com/config/latest/developerguide/cloudtrail-enabled.html
+
+
+# ==============================================================================
+# NOT IN THE CANONICAL RULESET - OURS
+# ==============================================================================
+#
+# These five have no canonical equivalent and they are load-bearing, not extra.
+# The canonical set finds misconfigurations; these are what turn a set of
+# misconfigurations into a *path*:
+#
+#   * EC2_PUBLIC_IP and ELB_INTERNET_FACING mark a resource as reachable from
+#     the internet, which is what makes it a possible entry point.
+#   * EC2_IMDSV1_ENABLED, IAM_WILDCARD_PERMISSIONS and IAM_TRUST_POLICY_WILDCARD
+#     carry `semantic: privilege`, and graph/path_finder requires a privilege
+#     step somewhere in the middle of a chain before it will report the chain as
+#     an attack path. The canonical set has no `privilege` semantic at all, so
+#     without these every candidate path is rejected and the tool reports zero.
+#
+# So deleting this block does not lose five findings, it loses every attack path.
+#
+# TO WHOEVER OWNS THE CANONICAL RULESET:
+# these are ours and are meant to be replaced. The open question is whether
+# `privilege` should become a canonical semantic, since the canonical vocabulary
+# (network_control, exposure, capability, identity, trust, impact) has no way to
+# say "this grants the attacker authority they did not have".
+
+- id: EC2_PUBLIC_IP
+  origin: capstone
+  source_id: EC2_PUBLIC_IP
+  service: ec2
+  resource_type: AWS::EC2::Instance
+  semantic: exposure
+
+  state:
+    id: instance_with_public_ip
+    display_name: Instance With Public IP
+
+  summary: >
+    EC2 instance is assigned a public IP address, so it is reachable from the
+    internet subject only to its security groups.
+
+  conditions:
+    operator: AND
+    operands:
+      - field: AssociatePublicIpAddress
+        comparison: equals
+        value: "{associatePublicIpAddress}"
+
+  parameters:
+    associatePublicIpAddress: true
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1552.005
+      name: "Unsecured Credentials: Cloud Instance Metadata API"
+
+
+- id: ELB_INTERNET_FACING
+  origin: capstone
+  source_id: ELB_INTERNET_FACING
+  service: elasticloadbalancing
+  resource_type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  semantic: exposure
+
+  state:
+    id: internet_facing_load_balancer
+    display_name: Internet Facing Load Balancer
+
+  summary: >
+    Load balancer has an internet-facing scheme, so everything behind it is
+    reachable from the internet through its listeners.
+
+  conditions:
+    operator: AND
+    operands:
+      - field: Scheme
+        comparison: equals
+        value: "{internetFacingScheme}"
+
+  parameters:
+    internetFacingScheme: internet-facing
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1021.007
+      name: "Remote Services: Cloud Services"
+
+
+- id: RDS_PUBLICLY_ACCESSIBLE
+  origin: capstone
+  source_id: RDS_PUBLICLY_ACCESSIBLE
+  service: rds
+  resource_type: AWS::RDS::DBInstance
+  semantic: exposure
+
+  state:
+    id: publicly_accessible_database
+    display_name: Publicly Accessible Database
+
+  summary: >
+    Database instance has a public endpoint, so it is reachable from the
+    internet subject only to its security groups.
+
+  # NOT the same thing as the canonical RDS_STORAGE_ENCRYPTED. That rule is about
+  # data at rest; this one is about whether an attacker can reach the database at
+  # all, which is what makes it an entry point. Dropping it in the canonical swap
+  # would have silently removed every path that starts at a database.
+  conditions:
+    operator: AND
+    operands:
+      - field: PubliclyAccessible
+        comparison: equals
+        value: "{publiclyAccessible}"
+
+  parameters:
+    publiclyAccessible: true
+
+  attack_techniques:
+    - id: T1190
+      name: Exploit Public-Facing Application
+    - id: T1078
+      name: Valid Accounts
+
+  references:
+    - source: aws_config
+      id: RDS_INSTANCE_PUBLIC_ACCESS_CHECK
+      url: https://docs.aws.amazon.com/config/latest/developerguide/rds-instance-public-access-check.html
+
+
+- id: S3_WILDCARD_POLICY
+  origin: capstone
+  source_id: S3_WILDCARD_POLICY
+  service: s3
+  resource_type: AWS::S3::BucketPolicy
+  semantic: privilege
+
+  state:
+    id: wildcard_bucket_policy
+    display_name: Wildcard Bucket Policy
+
+  summary: >
+    Bucket policy grants wildcard actions to any principal.
+
+  # OVERLAPS THE CANONICAL RULE, DELIBERATELY.
+  # S3_BUCKET_PUBLIC_READ_PROHIBITED reaches the same policy document, but it
+  # attributes the finding to the *bucket* and calls it `exposure`. This one
+  # attributes it to the policy resource and calls it `privilege`, because a
+  # wildcard principal on a wildcard action is not only readable data, it is a
+  # grant of authority to anonymous callers. The path search needs it as an
+  # authority step, which an `exposure` finding on the bucket cannot be.
+  #
+  # If a canonical rule ever expresses that, delete this one.
+  conditions:
+    scope: PolicyDocument.Statement
+    operator: AND
+    operands:
+
+      - field: Effect
+        comparison: equals
+        value: "{allowEffect}"
+
+      - operator: OR
+        operands:
+          - field: Principal
+            comparison: equals
+            value: "{wildcardPrincipal}"
+          - field: Principal.AWS
+            comparison: equals
+            value: "{wildcardPrincipal}"
+
+      - field: Action
+        comparison: contains
+        value: "{wildcardAction}"
+
+  parameters:
+    allowEffect: Allow
+    wildcardPrincipal: "*"
+    wildcardAction: "*"
+
+  attack_techniques:
+    - id: T1078
+      name: Valid Accounts
+    - id: T1530
+      name: Data from Cloud Storage
+
+
+- id: EC2_IMDSV1_ENABLED
+  origin: capstone
+  source_id: EC2_IMDSV1_ENABLED
+  service: ec2
+  resource_type: AWS::EC2::Instance
+  semantic: privilege
+
+  state:
+    id: instance_metadata_service_v1_enabled
+    display_name: Instance Metadata Service v1 Enabled
+
+  summary: >
+    Instance allows IMDSv1, so anything able to make an HTTP request from the
+    instance can read the credentials of the role attached to it.
+
+  # This is the step from "the attacker has a server" to "the attacker has IAM
+  # credentials". Before this rule existed that step was assumed by the path
+  # search rather than resting on a finding.
+  conditions:
+    operator: NOT
+    operand:
+      field: MetadataOptions.HttpTokens
+      comparison: equals
+      value: "{requiredTokenMode}"
+
+  parameters:
+    requiredTokenMode: required
+
+  attack_techniques:
+    - id: T1552.005
+      name: "Unsecured Credentials: Cloud Instance Metadata API"
+    - id: T1078.004
+      name: "Valid Accounts: Cloud Accounts"
+
+
+- id: IAM_WILDCARD_PERMISSIONS
+  origin: capstone
+  source_id: IAM_WILDCARD_PERMISSIONS
+  service: iam
+  resource_type: AWS::IAM::Role
+  semantic: privilege
+
+  state:
+    id: wildcard_role_permissions
+    display_name: Wildcard Role Permissions
+
+  summary: >
+    Role grants every action on every resource, or is assumable by any service.
+
+  conditions:
+    operator: OR
+    operands:
+
+      - operator: AND
+        scope: Policies.PolicyDocument.Statement
+        operands:
+          - field: Effect
+            comparison: equals
+            value: "{allowEffect}"
+          - field: Action
+            comparison: equals
+            value: "{wildcardAction}"
+          - field: Resource
+            comparison: equals
+            value: "{wildcardResource}"
+
+      - operator: AND
+        scope: AssumeRolePolicyDocument.Statement
+        operands:
+          - field: Effect
+            comparison: equals
+            value: "{allowEffect}"
+          - field: Principal.Service
+            comparison: equals
+            value: "{wildcardService}"
+
+  parameters:
+    allowEffect: Allow
+    wildcardAction: "*"
+    wildcardResource: "*"
+    wildcardService: "*"
+
+  attack_techniques:
+    - id: T1098.001
+      name: "Account Manipulation: Additional Cloud Credentials"
+    - id: T1078.004
+      name: "Valid Accounts: Cloud Accounts"
+    - id: T1580
+      name: Cloud Infrastructure Discovery
+
+
+- id: IAM_TRUST_POLICY_WILDCARD
+  origin: capstone
+  source_id: IAM_TRUST_POLICY_WILDCARD
+  service: iam
+  resource_type: AWS::IAM::Role
+  semantic: privilege
+
+  state:
+    id: role_assumable_by_any_principal
+    display_name: Role Assumable By Any Principal
+
+  summary: >
+    Role's trust policy allows any principal to assume it.
+
+  conditions:
+    operator: AND
+    scope: AssumeRolePolicyDocument.Statement
+    operands:
+
+      - field: Effect
+        comparison: equals
+        value: "{allowEffect}"
+
+      - operator: OR
+        operands:
+          - field: Principal
+            comparison: equals
+            value: "{anyPrincipal}"
+          - field: Principal.AWS
+            comparison: equals
+            value: "{anyPrincipal}"
+          - field: Principal.Service
+            comparison: equals
+            value: "{anyPrincipal}"
+
+  parameters:
+    allowEffect: Allow
+    anyPrincipal: "*"
+
+  attack_techniques:
+    - id: T1098.003
+      name: "Account Manipulation: Additional Cloud Roles"
+    - id: T1548.005
+      name: "Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access"
+    - id: T1199
+      name: Trusted Relationship

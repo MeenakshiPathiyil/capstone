@@ -1,0 +1,115 @@
+# What an attacker is trying to achieve, and therefore what counts as the end of
+# an attack path.
+#
+# Grounded in the Impact, Collection and Exfiltration tactics of the ATT&CK IaaS
+# matrix — https://attack.mitre.org/matrices/enterprise/cloud/iaas/
+#
+# THEORY (why the endpoint was too narrow):
+# path_finder used to end a path at a hardcoded DATA_TYPES list — S3, RDS, Secrets,
+# KMS. That encodes exactly one goal, data theft, and silently defines every other
+# attack out of existence. An attacker who encrypts the same database rather than
+# reading it walks an identical path and was reported as nothing at all, even
+# though ATT&CK gives that its own tactic and technique (T1486). So the endpoint is
+# now a set of objectives, each with its own qualifying resources.
+#
+# THEORY (why `requires_privilege` is per objective):
+# The exploitability policy demands an interior privilege hop, because reading a
+# database needs credentials you were not given. Denial of service does not — you
+# reach a public endpoint and flood it, and no escalation happens anywhere. A
+# single global policy therefore *rejects* a real attack. The requirement belongs
+# to the objective, not to the search.
+#
+# FIELDS:
+#   id                  objective identifier, exported alongside each path
+#   name                human phrasing, used in the scenario prompt
+#   resource_types      what qualifies as a target for this objective
+#   requires_privilege  whether an interior privilege hop is needed
+#   base_weight         added to the severity total; ranks goals against each other
+#   techniques          ATT&CK IaaS ids, all present in attack_techniques.yaml
+#
+# BASE WEIGHTS ARE OURS, NOT MEASURED. They encode one judgement: destroying data
+# you cannot recover outranks copying it, which outranks stealing compute time,
+# which outranks making a service unavailable for a while. Reasonable people would
+# order availability differently for a system where uptime is the product.
+
+objectives:
+
+  - id: data_theft
+    name: Data theft
+    resource_types:
+      - AWS::S3::Bucket
+      - AWS::RDS::DBInstance
+      # Aurora. Listed here as well as in DATA_TYPES: a capability edge reaching
+      # a store no objective claims is an edge that leads nowhere, because
+      # walk_paths only terminates a route at objective_targets().
+      - AWS::RDS::DBCluster
+      - AWS::Redshift::Cluster
+      - AWS::SecretsManager::Secret
+      - AWS::KMS::Key
+      - AWS::DynamoDB::Table
+      - AWS::EFS::FileSystem
+      - AWS::SQS::Queue
+    requires_privilege: true
+    base_weight: 4.0
+    techniques: [T1530, T1619, T1537]
+
+  - id: ransomware
+    name: Ransomware or destruction
+    resource_types:
+      - AWS::S3::Bucket
+      - AWS::RDS::DBInstance
+      - AWS::RDS::DBCluster
+      - AWS::Redshift::Cluster
+      - AWS::DynamoDB::Table
+      - AWS::EFS::FileSystem
+      - AWS::EC2::Volume
+    requires_privilege: true
+    base_weight: 5.0
+    techniques: [T1486, T1485, T1490]
+
+  - id: resource_hijacking
+    name: Resource hijacking
+    resource_types:
+      - AWS::EC2::Instance
+      - AWS::Lambda::Function
+      - AWS::ECS::Service
+      # Every type build_escalation_edges can draw a `hijack` edge to, or the
+      # edge terminates nowhere. Production stacks run compute as a scaling
+      # group over a launch template rather than as a bare instance.
+      - AWS::EC2::LaunchTemplate
+      - AWS::AutoScaling::LaunchConfiguration
+      - AWS::AutoScaling::AutoScalingGroup
+      - AWS::Glue::DevEndpoint
+      - AWS::SageMaker::NotebookInstance
+    requires_privilege: true
+    base_weight: 2.0
+    techniques: [T1496]
+
+  # The one objective whose target must itself be a finding.
+  #
+  # Every IAM role is a role, so listing the type alone made every hop of every
+  # escalation chain an endpoint — a chain of ten roles reported ten "attacks",
+  # nine of which end nowhere. Seizing an identity is only an objective when the
+  # identity is worth having, so the target must carry a `privilege` finding.
+  - id: identity_takeover
+    name: Identity takeover
+    resource_types:
+      - AWS::IAM::Role
+      - AWS::IAM::User
+    target_requires_semantic: privilege
+    requires_privilege: true
+    base_weight: 3.0
+    techniques: [T1098, T1531]
+
+  # The one objective that needs no escalation. Reaching a public endpoint is the
+  # whole attack, which is why requires_privilege is false — and why a single
+  # global exploitability policy would have thrown this away.
+  - id: denial_of_service
+    name: Denial of service
+    resource_types:
+      - AWS::ElasticLoadBalancingV2::LoadBalancer
+      - AWS::EC2::Instance
+      - AWS::RDS::DBInstance
+    requires_privilege: false
+    base_weight: 1.0
+    techniques: [T1498, T1499, T1489]

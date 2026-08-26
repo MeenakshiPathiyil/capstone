@@ -1,0 +1,384 @@
+[
+  {
+    "id": "AppInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "connections": [
+      {
+        "target": "AppServerRole",
+        "type": "identity",
+        "relation": "dependency"
+      }
+    ],
+    "states": [],
+    "max_severity": null,
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "AppSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "connections": [],
+    "states": [
+      {
+        "rule_id": "aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup",
+        "source_id": "INCOMING_SSH_DISABLED",
+        "state": "unrestricted_ssh_access",
+        "semantic": "network_control",
+        "severity": "high"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup (unrestricted_ssh_access, high)"
+  },
+  {
+    "id": "AppServerInstance",
+    "type": "AWS::EC2::Instance",
+    "connections": [
+      {
+        "target": "AppSecurityGroup",
+        "type": "network_control",
+        "relation": "association"
+      },
+      {
+        "target": "AppInstanceProfile",
+        "type": "identity",
+        "relation": "dependency"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "aws_config:REQUIRED_TAGS:AWS::EC2::Instance",
+        "source_id": "REQUIRED_TAGS",
+        "state": "required_tag_missing",
+        "semantic": "capability",
+        "severity": "low"
+      },
+      {
+        "rule_id": "EC2_PUBLIC_IP",
+        "source_id": "EC2_PUBLIC_IP",
+        "state": "instance_with_public_ip",
+        "semantic": "exposure",
+        "severity": "high"
+      },
+      {
+        "rule_id": "EC2_IMDSV1_ENABLED",
+        "source_id": "EC2_IMDSV1_ENABLED",
+        "state": "instance_metadata_service_v1_enabled",
+        "semantic": "privilege",
+        "severity": "critical"
+      }
+    ],
+    "max_severity": "critical",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: EC2_PUBLIC_IP (instance_with_public_ip, high)"
+  },
+  {
+    "id": "AppServerRole",
+    "type": "AWS::IAM::Role",
+    "connections": [
+      {
+        "target": "DeploymentRole",
+        "type": "identity",
+        "relation": "dependency"
+      },
+      {
+        "target": "DeploymentRole",
+        "type": "escalation",
+        "relation": "escalation"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "PRIVESC_PASSROLE_LAMBDA_INVOKE",
+        "source_id": "PRIVESC_PASSROLE_LAMBDA_INVOKE",
+        "state": "privesc_passrole_lambda_invoke",
+        "semantic": "privilege",
+        "severity": "high"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "DeploymentRole",
+    "type": "AWS::IAM::Role",
+    "connections": [
+      {
+        "target": "ReportsTable",
+        "type": "capability",
+        "relation": "capability"
+      },
+      {
+        "target": "OverPermissiveRole",
+        "type": "escalation",
+        "relation": "escalation"
+      },
+      {
+        "target": "AppServerRole",
+        "type": "escalation",
+        "relation": "escalation"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "PRIVESC_ATTACH_ROLE_POLICY",
+        "source_id": "PRIVESC_ATTACH_ROLE_POLICY",
+        "state": "privesc_attach_role_policy",
+        "semantic": "privilege",
+        "severity": "critical"
+      }
+    ],
+    "max_severity": "critical",
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "IngestFunction",
+    "type": "AWS::Lambda::Function",
+    "connections": [
+      {
+        "target": "DeploymentRole",
+        "type": "trust",
+        "relation": "trust"
+      }
+    ],
+    "states": [],
+    "max_severity": null,
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "InsecureS3Bucket",
+    "type": "AWS::S3::Bucket",
+    "connections": [],
+    "states": [
+      {
+        "rule_id": "aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket",
+        "source_id": "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
+        "state": "s3_bucket_public_access_allowed",
+        "semantic": "exposure",
+        "severity": "high"
+      },
+      {
+        "rule_id": "aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket",
+        "source_id": "S3_BUCKET_PUBLIC_READ_PROHIBITED",
+        "state": "s3_bucket_public_read_allowed",
+        "semantic": "exposure",
+        "severity": "high"
+      },
+      {
+        "rule_id": "aws_config:REQUIRED_TAGS:AWS::S3::Bucket",
+        "source_id": "REQUIRED_TAGS",
+        "state": "required_tag_missing",
+        "semantic": "capability",
+        "severity": "low"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket (s3_bucket_public_access_allowed, high), aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket (s3_bucket_public_read_allowed, high)"
+  },
+  {
+    "id": "OpenLoadBalancer",
+    "type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "connections": [],
+    "states": [
+      {
+        "rule_id": "ELB_INTERNET_FACING",
+        "source_id": "ELB_INTERNET_FACING",
+        "state": "internet_facing_load_balancer",
+        "semantic": "exposure",
+        "severity": "high"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: ELB_INTERNET_FACING (internet_facing_load_balancer, high)"
+  },
+  {
+    "id": "OpenSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "connections": [],
+    "states": [
+      {
+        "rule_id": "aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup",
+        "source_id": "RESTRICTED_INCOMING_TRAFFIC",
+        "state": "unrestricted_common_port_access",
+        "semantic": "network_control",
+        "severity": "high"
+      },
+      {
+        "rule_id": "aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup",
+        "source_id": "INCOMING_SSH_DISABLED",
+        "state": "unrestricted_ssh_access",
+        "semantic": "network_control",
+        "severity": "high"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup (unrestricted_common_port_access, high), aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup (unrestricted_ssh_access, high)"
+  },
+  {
+    "id": "OverPermissiveInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "connections": [
+      {
+        "target": "OverPermissiveRole",
+        "type": "identity",
+        "relation": "dependency"
+      }
+    ],
+    "states": [],
+    "max_severity": null,
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "OverPermissiveRole",
+    "type": "AWS::IAM::Role",
+    "connections": [
+      {
+        "target": "InsecureS3Bucket",
+        "type": "capability",
+        "relation": "capability"
+      },
+      {
+        "target": "PublicRDS",
+        "type": "capability",
+        "relation": "capability"
+      },
+      {
+        "target": "ReportsTable",
+        "type": "capability",
+        "relation": "capability"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "IAM_WILDCARD_PERMISSIONS",
+        "source_id": "IAM_WILDCARD_PERMISSIONS",
+        "state": "wildcard_role_permissions",
+        "semantic": "privilege",
+        "severity": "critical"
+      },
+      {
+        "rule_id": "IAM_TRUST_POLICY_WILDCARD",
+        "source_id": "IAM_TRUST_POLICY_WILDCARD",
+        "state": "role_assumable_by_any_principal",
+        "semantic": "privilege",
+        "severity": "critical"
+      }
+    ],
+    "max_severity": "critical",
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "PublicBucketPolicy",
+    "type": "AWS::S3::BucketPolicy",
+    "connections": [
+      {
+        "target": "InsecureS3Bucket",
+        "type": "connection",
+        "relation": "dependency"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "S3_WILDCARD_POLICY",
+        "source_id": "S3_WILDCARD_POLICY",
+        "state": "wildcard_bucket_policy",
+        "semantic": "privilege",
+        "severity": "critical"
+      }
+    ],
+    "max_severity": "critical",
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  },
+  {
+    "id": "PublicEC2Instance",
+    "type": "AWS::EC2::Instance",
+    "connections": [
+      {
+        "target": "OpenSecurityGroup",
+        "type": "network_control",
+        "relation": "association"
+      },
+      {
+        "target": "OverPermissiveInstanceProfile",
+        "type": "identity",
+        "relation": "dependency"
+      }
+    ],
+    "states": [
+      {
+        "rule_id": "aws_config:REQUIRED_TAGS:AWS::EC2::Instance",
+        "source_id": "REQUIRED_TAGS",
+        "state": "required_tag_missing",
+        "semantic": "capability",
+        "severity": "low"
+      },
+      {
+        "rule_id": "EC2_PUBLIC_IP",
+        "source_id": "EC2_PUBLIC_IP",
+        "state": "instance_with_public_ip",
+        "semantic": "exposure",
+        "severity": "high"
+      },
+      {
+        "rule_id": "EC2_IMDSV1_ENABLED",
+        "source_id": "EC2_IMDSV1_ENABLED",
+        "state": "instance_metadata_service_v1_enabled",
+        "semantic": "privilege",
+        "severity": "critical"
+      }
+    ],
+    "max_severity": "critical",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: EC2_PUBLIC_IP (instance_with_public_ip, high)"
+  },
+  {
+    "id": "PublicRDS",
+    "type": "AWS::RDS::DBInstance",
+    "connections": [],
+    "states": [
+      {
+        "rule_id": "aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance",
+        "source_id": "RDS_STORAGE_ENCRYPTED",
+        "state": "rds_storage_unencrypted",
+        "semantic": "exposure",
+        "severity": "high"
+      },
+      {
+        "rule_id": "aws_config:REQUIRED_TAGS:AWS::RDS::DBInstance",
+        "source_id": "REQUIRED_TAGS",
+        "state": "required_tag_missing",
+        "semantic": "capability",
+        "severity": "low"
+      },
+      {
+        "rule_id": "RDS_PUBLICLY_ACCESSIBLE",
+        "source_id": "RDS_PUBLICLY_ACCESSIBLE",
+        "state": "publicly_accessible_database",
+        "semantic": "exposure",
+        "severity": "high"
+      }
+    ],
+    "max_severity": "high",
+    "is_entry": true,
+    "entry_reason": "reachable from outside: aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance (rds_storage_unencrypted, high), RDS_PUBLICLY_ACCESSIBLE (publicly_accessible_database, high)"
+  },
+  {
+    "id": "ReportsTable",
+    "type": "AWS::DynamoDB::Table",
+    "connections": [],
+    "states": [],
+    "max_severity": null,
+    "is_entry": false,
+    "entry_reason": "not an entry point: no finding on this resource declares one of the semantics that mean reachable from outside (network_control, exposure)"
+  }
+]
