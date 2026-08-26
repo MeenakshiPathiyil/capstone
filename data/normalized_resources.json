@@ -76,13 +76,29 @@
       "SecurityGroupIds": [
         "OpenSecurityGroup"
       ],
+      "IamInstanceProfile": "OverPermissiveInstanceProfile",
       "AssociatePublicIpAddress": true
     },
     "semantic_properties": {
       "ImageId": "unknown",
       "InstanceType": "unknown",
       "SecurityGroupIds[0]": "network_control",
+      "IamInstanceProfile": "identity",
       "AssociatePublicIpAddress": "exposure"
+    }
+  },
+  {
+    "id": "OverPermissiveInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "raw_properties": {
+      "InstanceProfileName": "overly-permissive-profile",
+      "Roles": [
+        "OverPermissiveRole"
+      ]
+    },
+    "semantic_properties": {
+      "InstanceProfileName": "unknown",
+      "Roles[0]": "capability"
     }
   },
   {
@@ -167,6 +183,192 @@
       "Type": "unknown",
       "Subnets[0]": "unknown",
       "Subnets[1]": "unknown"
+    }
+  },
+  {
+    "id": "AppSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "raw_properties": {
+      "GroupDescription": "Application tier, SSH left open",
+      "SecurityGroupIngress": [
+        {
+          "IpProtocol": "tcp",
+          "FromPort": 22,
+          "ToPort": 22,
+          "CidrIp": "0.0.0.0/0"
+        }
+      ]
+    },
+    "semantic_properties": {
+      "GroupDescription": "unknown",
+      "SecurityGroupIngress[0].IpProtocol": "network_control",
+      "SecurityGroupIngress[0].FromPort": "network_control",
+      "SecurityGroupIngress[0].ToPort": "network_control",
+      "SecurityGroupIngress[0].CidrIp": "exposure"
+    }
+  },
+  {
+    "id": "AppServerInstance",
+    "type": "AWS::EC2::Instance",
+    "raw_properties": {
+      "ImageId": "ami-0fedcba9876543210",
+      "InstanceType": "t3.small",
+      "SecurityGroupIds": [
+        "AppSecurityGroup"
+      ],
+      "IamInstanceProfile": "AppInstanceProfile",
+      "AssociatePublicIpAddress": true
+    },
+    "semantic_properties": {
+      "ImageId": "unknown",
+      "InstanceType": "unknown",
+      "SecurityGroupIds[0]": "network_control",
+      "IamInstanceProfile": "identity",
+      "AssociatePublicIpAddress": "exposure"
+    }
+  },
+  {
+    "id": "AppInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "raw_properties": {
+      "InstanceProfileName": "app-server-profile",
+      "Roles": [
+        "AppServerRole"
+      ]
+    },
+    "semantic_properties": {
+      "InstanceProfileName": "unknown",
+      "Roles[0]": "capability"
+    }
+  },
+  {
+    "id": "AppServerRole",
+    "type": "AWS::IAM::Role",
+    "raw_properties": {
+      "RoleName": "app-server-role",
+      "AssumeRolePolicyDocument": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "deploy-helper",
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "iam:PassRole",
+                  "lambda:CreateFunction",
+                  "lambda:InvokeFunction"
+                ],
+                "Resource": "DeploymentRole"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "semantic_properties": {
+      "RoleName": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Effect": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Principal.Service": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyName": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Effect": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Action[0]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Action[1]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Action[2]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Resource": "capability"
+    }
+  },
+  {
+    "id": "DeploymentRole",
+    "type": "AWS::IAM::Role",
+    "raw_properties": {
+      "RoleName": "deployment-role",
+      "AssumeRolePolicyDocument": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "lambda.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "deployment-permissions",
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": [
+                  "iam:AttachRolePolicy",
+                  "dynamodb:GetItem",
+                  "dynamodb:PutItem",
+                  "dynamodb:DeleteItem"
+                ],
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "semantic_properties": {
+      "RoleName": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Effect": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Principal.Service": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyName": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Effect": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Action[0]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Action[1]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Action[2]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Action[3]": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Resource": "capability"
+    }
+  },
+  {
+    "id": "IngestFunction",
+    "type": "AWS::Lambda::Function",
+    "raw_properties": {
+      "FunctionName": "reports-ingest",
+      "Runtime": "python3.11",
+      "Handler": "index.handler",
+      "Role": "DeploymentRole"
+    },
+    "semantic_properties": {
+      "FunctionName": "unknown",
+      "Runtime": "unknown",
+      "Handler": "unknown",
+      "Role": "trust"
+    }
+  },
+  {
+    "id": "ReportsTable",
+    "type": "AWS::DynamoDB::Table",
+    "raw_properties": {
+      "TableName": "customer-reports",
+      "BillingMode": "PAY_PER_REQUEST",
+      "SSESpecification": {
+        "SSEEnabled": false
+      }
+    },
+    "semantic_properties": {
+      "TableName": "unknown",
+      "BillingMode": "unknown",
+      "SSESpecification.SSEEnabled": "unknown"
     }
   }
 ]
