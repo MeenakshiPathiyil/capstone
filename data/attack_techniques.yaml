@@ -3,8 +3,9 @@
 # Source: https://attack.mitre.org/matrices/enterprise/cloud/iaas/
 #
 # THEORY (why this file exists):
-# graph/exporter.py orders a path's techniques by the phase an attacker uses them
-# in, and that ordering used to come from a hand-written dict inside the exporter.
+# attack_path/exporter.py orders a path's techniques by the phase an attacker uses
+# them in, and that ordering used to come from a hand-written dict inside the
+# exporter.
 # A hand-written mapping drifts and cannot be checked against anything. This file
 # is the IaaS matrix itself, so the ordering is ATT&CK's rather than ours, and a
 # rule citing a technique outside this file is a rule citing a technique that is

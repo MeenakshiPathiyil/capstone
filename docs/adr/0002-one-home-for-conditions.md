@@ -14,9 +14,9 @@ was always a set of rules and should be written as one. Each edge category gets 
 default action in the ruleset, matched last. The guarantee survives, and there is
 one place to read to find out what an action requires.
 
-`graph/conditions.py` keeps only the fact vocabulary — the four fact names and the
-helpers for testing and accumulating them — which is the part all three modules
-legitimately share.
+`security_state_graph/facts.py` keeps only the fact vocabulary — the four fact
+names and the helpers for testing and accumulating them — which is the part all
+three modules legitimately share.
 
 ## Consequences
 

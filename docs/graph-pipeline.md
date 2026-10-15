@@ -1,12 +1,12 @@
-# Infrastructure Model & Security State Graph
+# The graph pipeline: from cloud configuration to ranked attack paths
 
 Reads a normalized cloud configuration, works out which resources are
 misconfigured and which IAM principals can escalate, joins those findings onto
 the connection graph, and ranks the routes an attacker could walk from the
 internet to an objective.
 
-The ranked routes are exported for the scenario-generation repo, which turns each
-one into an attack narrative with a fine-tuned Mistral-7B.
+The ranked routes are exported for `scenario_generation/`, which turns each one
+into an attack narrative with a fine-tuned Mistral-7B.
 
 ## Running it
 
@@ -16,13 +16,17 @@ python3 -m runner.graph_runner
 ```
 
 ```
-Done. 15 resources, 16 edges, 11 security findings, 20 attack paths.
-  AP-001  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
+Done. 15 resources, 16 edges, 21 security findings, 22 attack paths.
+Attack graph: 22 attacker states, 19 actions, 7 distinct ATT&CK techniques.
+  AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
   ...
 ```
 
-`python3 main.py` prints the connection graph alone; `python3 -m runner.rule_runner`
-prints the rule findings alone.
+19 of the 22 paths are exported: the three MEDIUM ones are left out.
+
+`python3 main.py` builds and saves the connection graph alone;
+`python3 -m runner.rule_runner` writes the 21 findings alone, to
+`output/output_states.json`.
 
 ## External sources
 
@@ -43,16 +47,21 @@ count as targets.
 
 | File | |
 |---|---|
-| `data/normalized_resources.json` | input — the parsed cloud configuration |
+| `data/normalized_resources.json` | input: the parser's output for `sample_yamls/cloudformation5.yml` |
 | `data/security_rules.yaml` | input — declarative misconfiguration rules |
 | `data/privesc_methods.yaml` | input — the IAM escalation catalogue |
 | `data/objectives.yaml` | input — what counts as the end of an attack |
 | `data/attack_techniques.yaml` | input — the ATT&CK IaaS matrix |
-| `output/output_states.json` | rule findings |
-| `output/security_state_graph.json` | the graph: nodes with findings, both edge lists, summary |
+| `output/graph_{summary,nodes,edges,traversal_edges}.json` | the security state graph: nodes with findings, both edge lists, summary |
+| `output/attack_graph_{summary,nodes,edges}.json` | the attack graph: attacker states and the actions between them |
 | `output/security_state_graph.mmd` | the graph as a Mermaid diagram |
 | `output/security_state_graph.dot` | the graph as Graphviz DOT |
-| `output/attack_paths.json` | ranked routes, in the seven-key format the LLM repo reads |
+| `output/attack_paths.json` | ranked routes, in the seven-key format scenario generation reads |
+| `output/attack_path_steps.json` | each exported route hop by hop, with its score |
+| `data/infra_output.json` | the connection graph on its own |
+
+`output/` is not tracked. Every file in it has a golden copy under `tests/`
+(`golden_*`), and the tests fail when a run stops matching one.
 
 Rendering the diagram needs no Python dependency — paste the `.mmd` into
 <https://mermaid.live> or a ```` ```mermaid ```` block, or
@@ -69,13 +78,12 @@ so the diagram survives a greyscale print.
 
 | | Before | After |
 |---|---|---|
-| Rules | 1 | 7 (SSH added to the ports rule) |
-| Escalation methods detected | 0 | 28 in the catalogue, 2 firing |
-| Findings | 1 | 11 |
+| Rules | 1 | 20 |
+| Escalation methods in the catalogue | 0 | 28 |
+| Findings | 1 | 21 |
 | Edges | 1 | 16 |
-| Ranked attack paths | 0 | 20 |
+| Ranked attack paths | 0 | 22 (19 exported) |
 | Attack objectives | 1 (implicit) | 5 |
-| Tests | 0 | 357 here, 80 in the LLM repo |
 
 ## Design decisions
 
@@ -92,7 +100,7 @@ own arrows.
 asks whether the actions a principal *holds* cover the actions a method *needs*,
 with wildcards on both sides — set covering, not comparison. So the catalogue is
 data and the matching is `engine/privesc_detector.py`, whose findings join the
-rule engine's in `graph.state_graph.evaluate_findings`.
+rule engine's in `security_state_graph.state_graph.evaluate_findings`.
 
 **3. Escalation edges are what make this an attack graph.** `build_capability_edges`
 only ever drew principal → data, so the graph could not represent *role A becomes
@@ -151,7 +159,7 @@ account and are not comparable across accounts.
 
 ## Two contracts
 
-Breaking either breaks the other repo, so both are pinned by tests.
+Breaking either breaks scenario generation, so both are pinned by tests.
 
 1. `output/attack_paths.json` records carry exactly `source_id`, `source_name`,
    `industry`, `attack_level`, `techniques`, `surfaces`, `objective`, all strings.
@@ -163,7 +171,7 @@ Breaking either breaks the other repo, so both are pinned by tests.
 ## Tests
 
 ```bash
-python3 -m pytest -q
+python3 -m pytest -q tests
 ```
 
 Dependencies are the standard library plus PyYAML, with pytest for the tests.

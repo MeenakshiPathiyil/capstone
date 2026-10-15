@@ -59,8 +59,6 @@ steps in an attack, which is why you cannot just search the broken ones.
 
 # Stage 0 — reading the config file
 
-*Separate repo: `capstone-feature-yaml-parser-normalization`*
-
 ## `parser/infra_parser.py`
 
 Turns a CloudFormation YAML file into a flat list of resource records.
@@ -145,7 +143,7 @@ Verified on the real thing: **72 resources merged from 12 files.**
 
 # Stage 1 — drawing the arrows
 
-## `models/cloud_resource.py` (51 lines)
+## `models/cloud_resource.py`
 
 One box and its outgoing arrows.
 
@@ -159,7 +157,7 @@ a category to a readable relation (`identity` → `dependency`, `network_control
 this class owns the list, so it is the only place that can hold the rule for
 *every* producer.
 
-## `models/infra_model.py` (17 lines)
+## `models/infra_model.py`
 
 A dictionary of boxes, keyed by name. `add_resource`, `get_resource`,
 `all_resources`. That is genuinely all it is.
@@ -173,13 +171,13 @@ normalizes types, so `"22"` becomes `22` and `"true"` becomes `True`.
 used to be two different implementations that disagreed, so one was made an alias
 of the other.
 
-## `processing/attribute_extractor.py` (17 lines)
+## `processing/attribute_extractor.py`
 
 Wraps each resource so the rule engine can read it two ways at once: the flat
 paths for simple matching, and `_structured` (the original nesting) for conditions
 that need to walk lists.
 
-## `engine/connection_builder.py` (502 lines) — the important file
+## `engine/connection_builder.py` — the important file
 
 Three passes over the resources. Each draws a different kind of arrow.
 
@@ -272,7 +270,7 @@ Flipping is explained under `state_graph.py`.
 
 Two separate detectors, because they ask different kinds of question.
 
-## `engine/rule_engine.py` (203 lines)
+## `engine/rule_engine.py`
 
 Loads `data/security_rules.yaml`, then **indexes the rules by resource type** so an
 S3 rule is never evaluated against a database. For each resource it evaluates the
@@ -293,7 +291,7 @@ the port list editable at the top of the rule instead of buried in its condition
 A rule that throws is caught, warned about, and skipped — one bad rule must not
 stop the other nine.
 
-## `engine/condition_evaluator.py` (262 lines)
+## `engine/condition_evaluator.py`
 
 Evaluates one rule's conditions. Understands `AND`, `OR`, `NOT` and leaf
 comparisons.
@@ -335,7 +333,7 @@ quietly did not fire on half the templates it should**.
 should not also match the integer `-1` unless it says so. Rules needing both use
 `in: ["-1", -1]`.
 
-## `engine/privesc_detector.py` (476 lines)
+## `engine/privesc_detector.py`
 
 IAM escalation. In code, not YAML, and the reason is worth understanding.
 
@@ -413,7 +411,7 @@ path search saw no escalation to travel through — **so it rejected every path
 through the very role those arrows came from.** The principle: if a grant is strong
 enough to justify an arrow, it is strong enough to be a finding.
 
-## `engine/attack_catalog.py` (171 lines)
+## `engine/attack_catalog.py`
 
 Reads `data/attack_techniques.yaml`, which is the MITRE ATT&CK cloud matrix as a
 file.
@@ -436,7 +434,7 @@ cloud matrix at all.
 
 # Stage 3 — the join
 
-## `graph/state_graph.py` (533 lines)
+## `security_state_graph/state_graph.py`
 
 This is the security state graph.
 
@@ -510,7 +508,7 @@ hop.
 
 # Stage 4 — finding the routes
 
-## `graph/path_finder.py` (510 lines)
+## `attack_path/path_finder.py`
 
 **`entry_points(graph)`** — every node with an `exposure` finding. Read off rule
 metadata, never hardcoded by resource type, so a new rule automatically produces
@@ -580,9 +578,9 @@ path *and* a ransomware path: same hops, different intent, different techniques,
 different story for the AI to write. Collapsing them to the worst one would hide
 data theft behind ransomware on every database.
 
-## `graph/exporter.py` (333 lines)
+## `attack_path/exporter.py`
 
-Writes `output/attack_paths.json` — the handshake with the AI repo.
+Writes `output/attack_paths.json`, the handshake with `scenario_generation/`.
 
 **`technique_index(rules_path)`** — builds `{rule_id: [techniques]}` by reading
 every rule's `attack_techniques`.
@@ -612,14 +610,14 @@ into the attack-surface vocabulary from the training data.
 ```
 
 Every value is forced to `str`, because the prompt template puts them all into an
-f-string. **That key set is a contract** — both repos have a test pinning it,
+f-string. **That key set is a contract**, pinned by tests on both sides,
 because a missing key is a crash *after* seven billion parameters are on the GPU.
 
 The `objective` key is why AP-001 and AP-002 are distinguishable: they share every
 hop and every surface, so without it the model would receive two identical records
 and write a data-theft story for a ransomware path.
 
-## `graph/renderer.py` (706 lines)
+## `attack_path/renderer.py`
 
 Writes the diagram twice — Mermaid (renders anywhere, nothing to install) and
 Graphviz DOT (for a print-quality image) — from the same dictionary, so they cannot
@@ -681,24 +679,21 @@ catches a rule that fires on everything.
 # If you change something
 
 ```bash
-python3 -m pytest -q          # 447 tests, about 12 seconds. Run it constantly.
+python3 -m pytest -q          # every test in the repo, about 25 seconds. Run it constantly.
 ```
 
 The golden files in `tests/` pin the exact output. If you change behaviour on
-purpose, regenerate them:
+purpose, read the diff, then regenerate them, including the copy scenario
+generation reads (a test fails if it falls behind):
 
 ```bash
 python3 -m runner.graph_runner
-cp output/security_state_graph.json tests/golden_security_state_graph.json
-cp output/security_state_graph.mmd  tests/golden_security_state_graph.mmd
-cp output/security_state_graph.dot  tests/golden_security_state_graph.dot
-cp output/attack_paths.json         tests/golden_attack_paths.json
-cp output/attack_paths.json \
-   ../capstone-feature-llm-scenario-finetuning/scenario_generation/tests/fixtures/
+for f in output/graph_*.json output/attack_graph_*.json output/attack_path*.json \
+         output/security_state_graph.mmd output/security_state_graph.dot; do
+    cp "$f" "tests/golden_$(basename "$f")"
+done
+cp tests/golden_attack_paths.json scenario_generation/evaluation/inputs/attack_paths.json
 ```
-
-That last copy matters — the other repo has a test asserting our export matches
-what it expects, and it fails if you forget.
 
 **Two habits worth keeping:**
 

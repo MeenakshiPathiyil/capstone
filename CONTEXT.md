@@ -2,8 +2,8 @@
 
 Reads a cloud infrastructure file, works out what is misconfigured, and derives
 the routes an attacker could take through it. The routes are handed to a
-fine-tuned language model in a sibling repository, which writes them up as attack
-scenarios.
+fine-tuned language model in `scenario_generation/`, which writes them up as
+attack scenarios.
 
 ## Language
 
@@ -115,5 +115,5 @@ _Avoid_: chain, route, kill chain, scenario
 
 **Scenario**:
 The written narrative a language model produces from an attack path. Belongs to
-the sibling repository, never to this one.
+`scenario_generation/`, never to the graph pipeline.
 _Avoid_: report, story, narrative

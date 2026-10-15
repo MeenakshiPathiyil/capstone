@@ -30,7 +30,7 @@ which is why you can work on one without understanding the others.
 ```
    a CloudFormation .yml file
               |
-   [0] PARSE          parser/infra_parser.py        (separate repo)
+   [0] PARSE          parser/infra_parser.py
               |       normalized_resources.json
               v
    [1] CONNECT        engine/connection_builder.py
@@ -40,13 +40,13 @@ which is why you can work on one without understanding the others.
               |       engine/privesc_detector.py       (IAM escalations)
               |       a list of "findings"
               v
-   [3] JOIN           graph/state_graph.py
+   [3] JOIN           security_state_graph/state_graph.py
               |       the security state graph
               v
-   [4] SEARCH         graph/path_finder.py
+   [4] SEARCH         attack_path/path_finder.py
               |       output/attack_paths.json
               v
-   [5] GENERATE       prompt_generator.py            (the other repo, needs a GPU)
+   [5] GENERATE       scenario_generation/prompt_generator.py   (needs a GPU)
                       tri-modal attack scenarios
 ```
 
@@ -85,10 +85,10 @@ Done. 15 resources, 16 edges, 21 security findings, 33 attack paths.
 Other entry points, for looking at one stage at a time:
 
 ```bash
-python3 main.py                 # stage 1 only: prints the connection graph
-python3 -m runner.rule_runner   # stage 2 only: prints the findings
-python3 -m pytest -q            # 495 tests
-python3 -m runner.benchmark     # how good the rules are, against real templates
+python3 main.py                 # stage 1 only: saves the connection graph
+python3 -m runner.rule_runner   # stage 2 only: writes the findings
+python3 -m pytest -q            # every test in the repo
+python3 -m runner.benchmark --corpus <dir>   # how good the rules are, against real templates
 ```
 
 To see the graph: open `output/security_state_graph.mmd`, copy all of it, paste
@@ -98,9 +98,9 @@ into <https://mermaid.live>.
 
 ## 4. The code, file by file
 
-### Stage 0 — the parser *(separate repo: `capstone-feature-yaml-parser-normalization`)*
+### Stage 0 — the parser
 
-**`parser/infra_parser.py`** (404 lines) turns a CloudFormation template into a
+**`parser/infra_parser.py`** turns a CloudFormation template into a
 flat list of resource records.
 
 ```python
@@ -124,7 +124,7 @@ parse("sample_yamls/cloudformation5.yml")
 edge". About 40% of real properties end up `unknown`, including genuine references
 to other resources. Stage 1 handles that — see below.
 
-**`parser/nested.py`** (371 lines) merges nested stacks. Real infrastructure is
+**`parser/nested.py`** merges nested stacks. Real infrastructure is
 split across files joined by `AWS::CloudFormation::Stack`, so a chain can start in
 one file and end in another. This reads the parent, follows each child, and merges
 them into one list. It resolves three things:
@@ -143,14 +143,14 @@ them into one list. It resolves three things:
 
 ### Stage 1 — building the graph
 
-**`models/cloud_resource.py`** (51 lines) — one resource and its outgoing edges.
+**`models/cloud_resource.py`** — one resource and its outgoing edges.
 The only interesting part is `add_connection()`, which refuses to store the same
 `(target, category)` twice, and maps a category to a human-readable relation.
 
-**`models/infra_model.py`** (17 lines) — a dictionary of all resources. That is all
+**`models/infra_model.py`** — a dictionary of all resources. That is all
 it is.
 
-**`engine/connection_builder.py`** (502 lines) — the important file. Three passes.
+**`engine/connection_builder.py`** — the important file. Three passes.
 
 **Pass 1: `build_connections()`** — the plain references.
 
@@ -218,7 +218,7 @@ The reversal column matters and is explained in section 5.
 
 Two separate detectors, because they ask different kinds of question.
 
-**`engine/rule_engine.py`** (203 lines) — declarative rules.
+**`engine/rule_engine.py`** — declarative rules.
 
 Loads `data/security_rules.yaml`, indexes the rules by resource type (so an S3
 rule is never evaluated against a database), then for each resource evaluates the
@@ -230,7 +230,7 @@ matching rules' condition trees. A match becomes a finding:
  "severity": "high"}
 ```
 
-**`engine/condition_evaluator.py`** (262 lines) — evaluates one rule's conditions.
+**`engine/condition_evaluator.py`** — evaluates one rule's conditions.
 Understands `AND` / `OR` / `NOT` and comparisons (`equals`, `contains`,
 `less_than_or_equal`…).
 
@@ -249,7 +249,7 @@ sides to numbers first, because templates are hand-written and a port arrives as
 raise an error that was silently swallowed, so the rule quietly did not fire.
 `equals` deliberately does **not** coerce.
 
-**`engine/privesc_detector.py`** (476 lines) — IAM escalation, in code not YAML.
+**`engine/privesc_detector.py`** — IAM escalation, in code not YAML.
 
 Why not a rule? A rule compares a field to a value. This asks whether the set of
 actions a role *holds* covers the set a method *needs*, with wildcards on both
@@ -280,7 +280,7 @@ That is set-covering with pattern matching. Key functions:
   policy saw nothing to escalate through — which blocked every real attack path we
   tried to find.
 
-**`engine/attack_catalog.py`** (171 lines) — reads
+**`engine/attack_catalog.py`** — reads
 `data/attack_techniques.yaml` (the MITRE ATT&CK cloud matrix) so technique IDs and
 their kill-chain ordering come from data rather than being hardcoded.
 
@@ -288,7 +288,7 @@ their kill-chain ordering come from data rather than being hardcoded.
 
 ### Stage 3 — the join
 
-**`graph/state_graph.py`** (533 lines). This is the "security state graph".
+**`security_state_graph/state_graph.py`**. This is the "security state graph".
 
 ```python
 graph = build_state_graph()          # reads the two data files, does everything
@@ -307,14 +307,14 @@ graph.nodes["PublicEC2Instance"]
   `resource.id`. A finding naming a resource that does not exist is counted as an
   *orphan* and skipped rather than crashing.
 - `traversal_edges()` builds a **second edge list** — see section 5.
-- `to_dict()` / `write_state_graph()` serialise it to
-  `output/security_state_graph.json`.
+- `to_dict()` / `write_state_graph()` serialise it to one file per block,
+  `output/graph_{summary,nodes,edges,traversal_edges}.json`.
 
 ---
 
 ### Stage 4 — finding the paths
 
-**`graph/path_finder.py`** (510 lines).
+**`attack_path/path_finder.py`**.
 
 `walk_paths()` → `extend_path()` is a plain recursive depth-first search:
 
@@ -358,12 +358,12 @@ severity weights   critical 10 · high 6 · medium 3 · low 1   (each weakness o
 
 **Every number there is our own judgement, not measured.** Say so if asked.
 
-**`graph/exporter.py`** (333 lines) writes `output/attack_paths.json` — one record
-per path with exactly seven keys. That key set is the contract with the other
-repo, and both repos have a test pinning it, because a missing key is a crash
+**`attack_path/exporter.py`** writes `output/attack_paths.json` — one record
+per path with exactly seven keys. That key set is the contract with
+`scenario_generation/`, pinned by tests on both sides, because a missing key is a crash
 *after* seven billion parameters are loaded onto a GPU.
 
-**`graph/renderer.py`** (706 lines) writes the diagram twice — Mermaid (renders
+**`attack_path/renderer.py`** writes the diagram twice — Mermaid (renders
 anywhere, no install) and Graphviz DOT (for a print-quality image). Both come from
 the same dictionary, so they cannot disagree.
 
@@ -430,9 +430,9 @@ Copy an existing rule. Keep the field order (a test checks it). Required:
 - `semantic` — one of `network_control`, `exposure`, `privilege`, `identity`,
   `trust`, `capability`, `impact`. This decides whether your rule can start a
   path or satisfy the escalation requirement, so it is load-bearing. The mapping
-  is `ENTRY_SEMANTICS` and `AUTHORITY_SEMANTICS` in `graph/path_finder.py`.
+  is `ENTRY_SEMANTICS` and `AUTHORITY_SEMANTICS` in `security_state_graph/semantics.py`.
 - **No `severity`.** A test fails if a rule declares one. It is derived from the
-  semantic through `SEVERITY_BY_SEMANTIC` in `graph/path_finder.py`, so there is
+  semantic through `SEVERITY_BY_SEMANTIC` in `security_state_graph/semantics.py`, so there is
   one table to defend rather than a number per rule.
 - `attack_techniques` — must exist in `data/attack_techniques.yaml` **with the
   matrix's name for that ID**. If you need a technique that is not in the file, add
@@ -464,10 +464,10 @@ carrying the four fields the review deck's Task 5 names.
 - `stop_after_match: true` — this action shadows any later one on the same edge.
   Use it so a specific action beats its generic sibling.
 
-**It does not have to be complete.** `graph/transitions.py` wraps
-`graph/conditions.py` rather than replacing it: an edge no action matches still
-gets a step, synthesised from its edge category, with a null technique. So an
-unwritten rule costs detail and never a path. Every run prints how many hops fell
+**It does not have to be complete.** An edge no action matches still gets a
+step, `fallback_action` in `security_state_graph/transitions.py`, which claims
+nothing and has a null technique. So an unwritten rule costs detail and never a
+path. Every run prints how many hops fell
 back, and `attack_graph_summary.json` records it as
 `edges_from_the_fallback_table`. On the shipped account and on all 438 corpus
 templates that number is zero — keep it there.
@@ -486,7 +486,7 @@ templates that number is zero — keep it there.
 
 ### Done
 
-- Stages 0–5 work end to end. 495 tests here, 80 in the other repo.
+- Stages 0–4 run end to end, and every stage is tested.
 - Nested stacks merge, so multi-file architectures can be analysed.
 - The graph, the paths and the diagram are all written to `output/`.
 - Measured against 2,441 real templates from public GitHub repos.
@@ -498,7 +498,6 @@ templates that number is zero — keep it there.
 |---|---|---|
 | 1 | **Run the generator on the real paths** | a GPU. This is the project's actual final output and nobody has done it. |
 | 2 | **Run the Gemini judge** | an API key |
-| 3 | **Push this to the repo** | collaborator access |
 | 4 | More rules | see the note below before spending time on it |
 | 5 | Network topology (subnets, routing) | substantial; would make "internet-facing" rigorous instead of a heuristic |
 | 6 | Model the server-takeover step properly | there is an IMDSv1 rule now, but it is still a modelling assumption |
@@ -525,12 +524,19 @@ pipeline can *find*.
 
 ## 8. If you break something
 
-- `python3 -m pytest -q` — 495 tests, ~13 seconds. Run it constantly.
+- `python3 -m pytest -q` runs every test in about 25 seconds. Run it constantly.
 - The golden files in `tests/` pin the exact output. If you change behaviour on
-  purpose, regenerate them: run `python3 -m runner.graph_runner`, then copy
-  `output/security_state_graph.{json,mmd,dot}` and `output/attack_paths.json` over
-  the `tests/golden_*` copies — and copy `attack_paths.json` to the other repo's
-  `tests/fixtures/` too, or its contract test fails.
+  purpose, read the diff, then regenerate them, including the copy scenario
+  generation reads:
+
+```bash
+python3 -m runner.graph_runner
+for f in output/graph_*.json output/attack_graph_*.json output/attack_path*.json \
+         output/security_state_graph.mmd output/security_state_graph.dot; do
+    cp "$f" "tests/golden_$(basename "$f")"
+done
+cp tests/golden_attack_paths.json scenario_generation/evaluation/inputs/attack_paths.json
+```
 - If a test fails after your change, **suspect your change before the test.** This
   already happened once: a deduplication was added to hide duplicate paths, a test
   objected, and the test was right — the duplicates were a real bug elsewhere.

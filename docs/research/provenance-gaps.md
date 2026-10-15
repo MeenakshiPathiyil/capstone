@@ -51,9 +51,9 @@ Rev1, p11 pairs "rule-based reasoning for graph construction" with "ML for risk
 scoring", and lists a *Vulnerability Intelligence Dataset* of actively exploited
 CVEs.
 
-What exists is a hand-weighted arithmetic formula in `graph/path_finder.py`. No
-model, no training, no CVE data. `graph/conditions.py` states plainly that there
-is no CVE and no patch level anywhere in the model.
+What exists is a hand-weighted arithmetic formula in `attack_path/scoring.py`. No
+model, no training, no CVE data. `security_state_graph/facts.py` states plainly
+that there is no CVE and no patch level anywhere in the model.
 
 **Options.** This one is a roadmap item rather than a misstatement — Task 7 says
 only "assign a risk score", which the formula does. But if the deck keeps the

@@ -43,11 +43,11 @@
 # rather than both firing.
 #
 # THE FALLBACK, AND WHY THIS FILE DOES NOT HAVE TO BE COMPLETE:
-# graph/transitions.py wraps rather than replaces graph/conditions.py. An edge no
-# action here matches still gets a step, synthesised from the edge category's
-# entry in EDGE_CONDITIONS, with a null technique and tactic. So a half-written
-# transition ruleset loses detail and never loses a path. Anything falling back
-# is reported by `python3 -m runner.graph_runner`, so the gap is visible.
+# An edge no action here matches still gets a step: fallback_action in
+# security_state_graph/transitions.py, which claims no precondition, postcondition,
+# technique or tactic. So a half-written transition ruleset loses detail and never
+# loses a path. Anything falling back is reported by
+# `python3 -m runner.graph_runner`, so the gap is visible.
 #
 # THE BINDING MINI-SYNTAX, for `input` and `output` values:
 #   "target.id"                    the resource id at the far end of the edge
