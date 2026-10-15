@@ -36,7 +36,7 @@ measures how much of KICS's check set we have reimplemented, not how good the
 tool is. See the README.
 
 Usage:
-    python3 -m runner.harvest_corpus --clone-dir /tmp/cfn_repos --out ~/Downloads/cfn_corpus_extra
+    python3 -m runner.harvest_corpus --out cfn_corpus_extra --reference cfn_semantic_corpus_2000
     python3 -m runner.harvest_corpus --list
 """
 
@@ -98,8 +98,6 @@ HARVEST_SOURCES = [
 ]
 
 DEFAULT_CLONE_DIR = Path("/tmp/cfn_repos")
-DEFAULT_OUT = Path.home() / "Downloads" / "cfn_corpus_extra"
-DEFAULT_REFERENCE = Path.home() / "Downloads" / "cfn_semantic_corpus_2000"
 
 SUFFIXES = {".yml", ".yaml", ".template", ".json"}
 
@@ -363,16 +361,21 @@ def parse_args(argv=None):
     parser.add_argument("--clone-dir", default=str(DEFAULT_CLONE_DIR),
                         help="Where to clone the source repos (default: %(default)s)")
 
-    parser.add_argument("--out", default=str(DEFAULT_OUT),
-                        help="Corpus directory to write (default: %(default)s)")
+    parser.add_argument("--out",
+                        help="Corpus directory to write")
 
-    parser.add_argument("--reference", default=str(DEFAULT_REFERENCE),
-                        help="Reference corpus to deduplicate against (default: %(default)s)")
+    parser.add_argument("--reference",
+                        help="Reference corpus to deduplicate against")
 
     parser.add_argument("--list", action="store_true",
                         help="Print the source repositories and exit")
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    if not args.list and not (args.out and args.reference):
+        parser.error("--out and --reference are required unless --list is given")
+
+    return args
 
 
 def main(argv=None):

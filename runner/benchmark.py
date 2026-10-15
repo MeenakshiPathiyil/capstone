@@ -78,8 +78,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 RULES_PATH = BASE_DIR / "data" / "security_rules.yaml"
 BASELINE_PATH = BASE_DIR / "output" / "benchmark_baseline.json"
 
-DEFAULT_CORPUS = Path.home() / "Downloads" / "cfn_semantic_corpus_2000"
-
 MANIFEST = "manifest.csv"
 
 # The label the corpus gives a template a scanner found something in.
@@ -205,7 +203,7 @@ def evaluate_template(resources, rules_path=RULES_PATH):
     }
 
 
-def run(corpus=DEFAULT_CORPUS, limit=None, rules_path=RULES_PATH):
+def run(corpus, limit=None, rules_path=RULES_PATH):
     """Evaluate every template in the corpus. Returns the summary dict."""
 
     corpus = Path(corpus)
@@ -433,8 +431,8 @@ def parse_args(argv=None):
 
     parser.add_argument(
         "--corpus",
-        default=str(DEFAULT_CORPUS),
-        help="Corpus directory containing manifest.csv (default: %(default)s)"
+        required=True,
+        help="Corpus directory containing manifest.csv, e.g. cfn_semantic_corpus_2000"
     )
 
     parser.add_argument(
