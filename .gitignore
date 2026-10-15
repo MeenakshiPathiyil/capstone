@@ -1,2 +1,26 @@
+# Scenario generation module — data files
+scenario_generation/dataset/raw/
+scenario_generation/dataset/inputs/
+scenario_generation/dataset/training_data_review.json
+scenario_generation/evaluation/evaluation_results.json
+scenario_generation/evaluation/test_inputs.jsonl
+scenario_generation/fine_tuning/finetuned_adapters.zip
+scenario_generation/fine_tuning/output/*.safetensors
+scenario_generation/fine_tuning/output/*.bin
+scenario_generation/fine_tuning/output/checkpoint-*/
+scenario_generation/fine_tuning/output/tokenizer.json
+scenario_generation/fine_tuning/output/training_args.bin
+
+# Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Environment variables (NEVER commit your API key)
+.env
+*.env.venv
+scenario_generation/.venv/
+scenario_generation/fine_tuning/output/*.safetensors
+scenario_generation/fine_tuning/output/*.bin
 venv

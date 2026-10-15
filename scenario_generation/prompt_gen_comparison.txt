@@ -1,0 +1,318 @@
+PROMPT GENERATOR MVP - BASELINE vs FINE-TUNED COMPARISON
+================================================================================
+
+PROMPT P1: Full Tri-Modal Scenario (Standard)
+Path      : DUMMY-MVP-001 | Financial and insurance activities (ISIC K) | HIGH
+Techniques: T1190 - Exploit Public-Facing Application, T1078 - Valid Accounts, T1098.001 - Additional Cloud Credentials, T1567.002 - Exfiltration to Cloud Storage, T1486 - Data Encrypted for Impact
+
+BASELINE OUTPUT (Mistral-7B, no fine-tuning)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+
+Scenario: Financial Institution Data Breach via Compromised Cloud Infrastructure
+
+1. An attacker initiates the campaign by identifying an internet-facing application of the financial institution (T1190). This application has known vulnerabilities that can be exploited to gain unauthorized access.
+
+2. Leveraging the identified vulnerability, the attacker gains access to the application (T1190). They then use valid accounts (T1078) within the application to blend in with normal traffic and evade detection.
+
+3. The attacker discovers that the application stores sensitive data in an internal cloud storage service (OSINT). They then obtain additional cloud credentials (T1098.001) to access this internal cloud infrastructure.
+
+4. Once inside the cloud infrastructure, the attacker locates and encrypts sensitive data stored in the cloud (T1486). The encryption is designed to cause impact (T1486.002) and disrupt operations.
+
+5. To ensure the data remains encrypted and inaccessible, the attacker sets up automated data exfiltration to an external cloud storage service (T1567.002).
+
+[MATHEMATICAL EXPRESSION]
+G = (N, S, V, P, FS)
+N = {Internet-facing application, Valid accounts, Internal cloud storage service, Additional cloud credentials, External cloud storage service}
+S = {Exploit public-facing application (T1190), Use valid accounts (T1078), Obtain additional cloud credentials (T1098.001), Encrypt data for impact (T1486.002), Exfiltrate data to cloud storage (T1567.002)}
+V = {Vulnerable internet-facing application, Valid accounts, Internal cloud storage service, Additional cloud credentials, External cloud storage service}
+P = {Known application vulnerabilities, Valid account credentials, Access to internal cloud infrastructure, Encryption key, External cloud storage service credentials}
+FS = {Encrypted sensitive data in cloud storage, Data exfiltrated to external cloud storage}
+
+[ATTACK GRAPH]
+1. Exploit public-facing application (T1190)
+2. Use valid accounts (T1078)
+3. Obtain additional cloud credentials (T1098.001)
+4. Encrypt data for impact (T1486.002)
+5. Exfiltrate data to cloud storage (T1567.002)
+
+1 -> 2
+2 -> 3
+3 -> 4
+4 -> 5
+
+FINE-TUNED OUTPUT (Mistral-7B + LoRA adapter)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+The attack begins with an initial exploit targeting a publicly facing web application (T1190) within the financial institution’s cloud environment. This application, a customer portal hosted on AWS Elastic Beanstalk, suffers from a known, but unpatched, SQL injection vulnerability. A malicious actor gains access to sensitive user credentials stored in clear text within the application’s database. These credentials belong to a legitimate employee with broad permissions within the organization’s Azure Active Directory (AAD).
+
+Leveraging these valid accounts (T1078), the attacker performs reconnaissance to identify other services accessible via the compromised credentials. They discover that the employee has access to a cloud storage bucket containing customer financial data. The attacker then utilizes the compromised account to enumerate additional cloud credentials stored within the instance metadata service (IMDS) of an EC2 instance used for batch processing data (T1098.001). These credentials provide access to a more privileged role, granting read and write access to multiple sensitive resources.
+
+With increased privileges, the attacker focuses on data exfiltration (T1567.002). They identify a database instance storing highly sensitive customer financial records and begin downloading the data in compressed format. To further obfuscate their activities and increase the impact, the attacker encrypts the exfiltrated data using a publicly available encryption tool (T1486). The encrypted data is then uploaded to a cloud storage bucket controlled by the attacker.
+
+Simultaneously, the attacker initiates a lateral movement campaign, attempting to compromise other systems within the internal network. They leverage the compromised AAD account to attempt credential stuffing against other services, such as VPN concentrators and domain controllers. While these attempts are unsuccessful, they successfully gain access to a less secure development environment, where they deploy a backdoor for future access. This backdoor allows them to maintain persistence and continue reconnaissance efforts.
+
+The attack concludes with the successful exfiltration of highly sensitive financial data, potentially leading to significant financial loss and reputational damage for the organization. The attacker’s ability to exploit a known vulnerability, leverage valid accounts, and utilize cloud metadata services highlights the importance of robust security controls and regular patching in cloud environments. The use of encryption and a backdoor for future access demonstrates the attacker’s sophistication and intent to cause long-term harm.
+
+[MATHEMATICAL EXPRESSION]
+N = {n1: Public Web Application, n2: Database Server, n3: EC2 Instance Metadata Service, n4: Cloud Storage Bucket, n5: Azure Active Directory, n6: Domain Controller, n7: Development Environment}
+S = {s1: SQL Injection Vulnerability, s2: Clear Text Credentials Storage, s3: Weak IAM Permissions, s4: Unsecured Cloud Metadata Access, s5: Unpatched Systems}
+V = {v1: T1190 - Exploit Public-Facing Application, v2: T1078 - Valid Accounts, v3: T1098.001 - Additional Cloud Credentials, v4: T1567.002 - Exfiltration to Cloud Storage, v5: T1486 - Data Encrypted for Impact, v6: T1588.001 - Lateral Movement, v7: T1518 - Backdoor}
+P = {p1: n1 -> n2 (SQL Injection), p2: n2 -> n5 (Stolen Credentials), p3: n5 -> n3 (IMDS Access), p4: n3 -> n4 (Data Exfiltration), p5: n5 -> n6 (Credential Stuffing), p6: n5 -> n7 (Initial Access), p7: n7 -> Internal Network (Lateral Movement)}
+FS = {fs1: Insufficient Security Monitoring, fs2: Lack of Patch Management, fs3: Weak Credential Hygiene, fs4: Insecure Cloud Configurations}
+
+[ATTACK GRAPH]
+1. Initial Access: T1190 - Public Web Application exploited (n1) leads to SQL Injection (p1) and stolen credentials (n2, n5).
+2. Privilege Escalation: Leveraging stolen credentials (n5), the attacker gains access to IMDS and identifies additional cloud credentials (n3).
+3. Data Discovery: Reconnaissance identifies sensitive data in Cloud Storage Bucket (n4) and Database Instance (n2).
+4. Data Collection: Utilizing compromised credentials (n5, n3), the attacker accesses Cloud Storage Bucket (n4) and downloads sensitive data (p4).
+5. Data Manipulation: Data is encrypted (T1486) prior to exfiltration to obscure its contents.
+6. Data Exfiltration: Encrypted data is uploaded to attacker-controlled Cloud Storage Bucket (n4).
+7. Lateral Movement: Attempts to compromise Domain Controller (n6) and Development Environment (n7) fail initially but establish a foothold for future access.
+8. Persistence: Backdoor (T1518) installed on Development
+
+================================================================================
+
+PROMPT P2: Cloud-Centric IAM Abuse
+Path      : DUMMY-MVP-001 | Financial and insurance activities (ISIC K) | HIGH
+Techniques: T1190 - Exploit Public-Facing Application, T1078 - Valid Accounts, T1098.001 - Additional Cloud Credentials, T1567.002 - Exfiltration to Cloud Storage, T1486 - Data Encrypted for Impact
+
+BASELINE OUTPUT (Mistral-7B, no fine-tuning)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+In the DUMMY-MVP-001 campaign, our adversarial focus is on exploiting cloud IAM misconfigurations within the Financial and Insurance activities industry. We will detail IAM role abuse, service account compromise, and metadata API exploitation.
+
+The attacker initially gains access to a legitimate user's account through phishing emails (T1566.001 - Phishing: Spearphishing Attachment) or social engineering techniques (T1078.002 - Social Engineering: Pretexting). With this valid account, they can access internet-facing services, such as a web application (T1190 - Exploit Public-Facing Application).
+
+Once inside, the attacker discovers an improperly configured IAM role with excessive permissions (T1027 - Post Exploitation: Command and Control: Native). They create a new service account within the IAM role (IAM role abuse) and assign it even more elevated privileges, granting them unauthorized access to sensitive data (T1098.001 - Additional Cloud Credentials).
+
+With the newly created service account, the attacker proceeds to compromise internal cloud metadata services by exploiting the AWS Metadata Service (T1133 - System Misconfiguration: Cloud Misconfiguration) or Google Compute Engine Metadata Server (T1133 - System Misconfiguration: Cloud Misconfiguration for other cloud providers).
+
+Leveraging the compromised metadata API, the attacker can enumerate and manipulate existing resources within the cloud environment (T1087 - Remote Services: Cloud Services: AWS EC2 API, T1087 - Remote Services: Cloud Services: Google Cloud API). This enables them to escalate their privileges further, gaining access to data egress points and cloud APIs (T1077 - Network Service Scanning).
+
+At this point, the attacker encrypts sensitive data using tools like MegaCryptoRansomware (T1486 - Data Encrypted for Impact) and exfiltrates the data to cloud storage services such as Amazon S3 or Google Cloud Storage (T1567.002 - Exfiltration to Cloud Storage).
+
+[MATHEMATICAL EXPRESSION]
+G = (N, S, V, P, FS)
+
+N = { User, Web Application, IAM Role, Service Account, Metadata API, Cloud Control Plane, Cloud Resources, Data Egress Points, Cloud Storage }
+
+S = { Phishing Email, Social Engineering Technique, Exploit Public-Facing Application, Improperly Configured IAM Role, Service Account Creation, Cloud Metadata Service, Cloud API, Data Encryption Tool, Cloud Storage Service }
+
+V = { user_account, web_app, iam_role, service_account, metadata_api, cloud_control_plane, cloud_resources, data_egress_points, cloud_storage }
+
+P = {
+  (User, Web Application) -> (User, user_account),
+  (User, Web Application) -> (IAM Role, exploit_public_facing_application),
+  (IAM Role, exploit_public_facing_application) -> (IAM Role, improperly_configured_iam_role),
+  (IAM Role, improperly_configured_iam_role) -> (Service Account, service_account_creation),
+  (Service Account, service_account_creation) -> (Service Account, service_account),
+  (Service Account, service_account) -> (Metadata API, metadata_api),
+  (Metadata API, metadata_api) -> (Attacker, enumeration_and_manipulation),
+  (Metadata API, enumeration_and_manipulation) -> (Cloud Control Plane, cloud_control_plane),
+  (Cloud Control Plane, cloud_control_plane) -> (Attacker, data_encryption),
+  (Attacker, data_encryption) -> (Cloud Storage Service, cloud_storage)
+}
+
+FS = {
+  (user_account, password),
+  (web_app, URL),
+  (iam_role, permissions),
+  (service_account, credentials),
+  (metadata_api, API_key),
+  (cloud_control_plane, policies),
+  (cloud_storage, encryption_key)
+}
+
+[ATTACK GRAPH]
+
+User -> Web Application (T1190)
+|
+-> IAM Role (T1027)
+|
+-> Service Account Creation (T1098.001)
+|
+-> Metadata API (T1133)
+|
+-> Enumeration & Manipulation (T1087)
+|
+-> Cloud Control Plane (T1077)
+|
+-> Data Encryption (T1486)
+|
+-> Cloud Storage Service (T1567.002)
+Attacker
+
+FINE-TUNED OUTPUT (Mistral-7B + LoRA adapter)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+The attack begins with a successful exploit of a publicly facing web application (T1190) within the financial institution’s cloud environment, specifically a customer-facing portal hosted on an Amazon Web Services (AWS) Elastic Beanstalk environment. This application, while not directly sensitive, contains a vulnerability allowing initial code execution. Once inside, the attacker leverages valid accounts (T1078) – specifically, a service account with limited permissions but access to a cloud storage bucket containing configuration files for internal systems – to establish a foothold. This service account was initially created for automated backups but lacks multi-factor authentication (MFA) and has overly permissive IAM roles assigned. The attacker then identifies a misconfiguration in the IAM role associated with this service account: it has been granted access to read metadata tags on other resources within the same AWS account.
+
+Lateral movement occurs by exploiting the ability to read metadata tags on EC2 instances. The attacker discovers a tag containing the IAM role ARN of a privileged administrator role. This role, designed for system maintenance, has unrestricted access to all resources within the organization’s AWS account, including sensitive data stored in S3 buckets and databases running on RDS. The attacker uses the compromised service account to assume the role of the privileged administrator, bypassing traditional security controls. This escalation of privileges allows the attacker to gain full control over the cloud infrastructure.
+
+Once in the privileged role, the attacker begins data exfiltration (T1567.002). They identify a critical S3 bucket containing customer financial records and encrypt the data using a publicly available encryption tool (T1486). The encrypted data is then uploaded to a malicious cloud storage account controlled by the attacker. To cover their tracks and prevent detection, the attacker modifies the IAM policy of the administrator role to restrict audit logging and alerting. The attack concludes with the successful exfiltration of sensitive customer data, potentially leading to significant financial loss and reputational damage for the financial institution.
+
+[MATHEMATICAL EXPRESSION]
+N = {n1: Public Web Application, n2: Service Account, n3: Cloud Storage Bucket (Config), n4: EC2 Instance, n5: IAM Role (Service Account), n6: IAM Role (Administrator), n7: S3 Bucket (Financial Data), n8: RDS Database, n9: Cloud Metadata Service}
+S = {s1: Vulnerable Web Application, s2: Overly Permissive IAM Role (Service Account), s3: Misconfigured IAM Policy (Administrator), s4: Lack of MFA on Service Account, s5: Weak Encryption on Exfiltrated Data}
+V = {v1: T1190 - Exploit Public-Facing Application, v2: T1078 - Valid Accounts, v3: T1098.001 - Additional Cloud Credentials, v4: T1567.002 - Exfiltration to Cloud Storage, v5: T1486 - Data Encrypted for Impact}
+P = {p1: n2 -> n4 via n1 (Initial Foothold), p2: n4 -> n5 (Reading Metadata Tags), p3: n5 -> n6 (Role Escalation), p4: n6 -> n7 (Data Exfiltration), p5: n6 -> n8 (Database Access)}
+FS = {fs1: n2 should have had more restricted IAM role, fs2: n4 should have had stronger security group rules, fs3: n5 should have required MFA, fs4: n6 should have logging enabled, fs5: Exfiltrated data should be encrypted before leaving the network}
+
+[ATTACK GRAPH]
+1. n1 (Public Web Application) -> n2 (Service Account) - T1190 (Exploit Public-Facing Application)
+2. n2 -> n4 (EC2 Instance) - T1078 (Valid Accounts)
+3. n4 -> n5 (IAM Role (Service Account)) - Reading Metadata Tags
+4. n5 -> n6 (IAM Role (Administrator)) - Role Escalation
+5. n6 -> n7 (S3 Bucket (Financial Data)) - Data Exfiltration
+6. n6 -> n8 (RDS Database) - Database Access
+7. n6 -> n1 - Modifying IAM Policy (Disabling Audit Logging)
+
+================================================================================
+
+PROMPT P3: Stealth and Persistence (APT-Style)
+Path      : DUMMY-MVP-001 | Financial and insurance activities (ISIC K) | HIGH
+Techniques: T1190 - Exploit Public-Facing Application, T1078 - Valid Accounts, T1098.001 - Additional Cloud Credentials, T1567.002 - Exfiltration to Cloud Storage, T1486 - Data Encrypted for Impact
+
+BASELINE OUTPUT (Mistral-7B, no fine-tuning)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+
+In the DUMMY-MVP-001 campaign, the adversary initially targeted an internet-facing application of a financial institution (K: Financial and insurance activities). Leveraging publicly known vulnerabilities (T1190), they successfully exploited the application to gain initial access.
+
+Once inside, the adversary began a stealthy credential harvesting operation (T1078) by utilizing built-in tools such as PowerShell scripts and command-line utilities to gather administrative credentials from memory dumps and configuration files.
+
+To maintain persistence within the environment, the adversary established a backdoor using a living-off-the-land binary (T1086). They chose PowerShell as the delivery vehicle, creating a scheduled task that executed a PowerShell script at regular intervals. This script established a reverse shell connection to a command-and-control (C2) server, allowing the adversary to remain hidden within the network.
+
+As time passed, the adversary gained access to additional cloud credentials (T1098.001) by exploiting misconfigurations in cloud storage and metadata services. They then utilized these credentials to move laterally across the cloud infrastructure, further expanding their foothold within the environment.
+
+During this dwell phase, the adversary took steps to cover their tracks by tampering with log files and system audit trails (T1114). They deleted sensitive logs and modified others, making it difficult for security personnel to detect their presence.
+
+Finally, to maximize the impact of their intrusion, the adversary encrypted sensitive data (T1486) stored in cloud services using a custom ransomware variant. The encryption process was designed to be slow and unobtrusive, allowing the adversary to exfiltrate the encrypted data to cloud storage (T1567.002) over a prolonged period.
+
+[MATHEMATICAL EXPRESSION]
+G = (N, S, V, P, FS)
+
+N = {Internet-facing application, Cloud metadata services, PowerShell, Command-line utilities, Ransomware}
+S = {Exploitation, Credential harvesting, Living-off-the-land binary, Lateral movement, Log tampering, Data encryption, Data exfiltration}
+V = {Successful exploitation of internet-facing application, Harvesting of administrative credentials, Establishment of backdoor using PowerShell, Gaining access to additional cloud credentials, Tampering with log files, Encrypting sensitive data, Exfiltrating encrypted data to cloud storage}
+P = {PowerShell script, Reverse shell, Custom ransomware variant}
+FS = {Internet-facing application, Cloud metadata services, PowerShell script, Reverse shell connection, Custom ransomware variant, Cloud storage}
+
+[ATTACK GRAPH]
+
+1. Exploitation (T1190) -> Internet-facing application
+2. Credential harvesting (T1078) -> Command-line utilities, PowerShell scripts
+3. Living-off-the-land binary (T1086) -> PowerShell, Reverse shell
+4. Lateral movement (T1080) -> Cloud metadata services, Additional cloud credentials (T1098.001)
+5. Log tampering (T1114) -> Log files, System audit trails
+6. Data encryption (T1486) -> Sensitive data, Custom ransomware variant
+7. Data exfiltration (T1567.002) -> Cloud storage, Encrypted data
+
+FINE-TUNED OUTPUT (Mistral-7B + LoRA adapter)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+The attack begins with a successful exploit of a publicly facing web application (T1190) within the financial institution’s customer portal. This application, while not critical infrastructure, serves as a foothold into the network. The initial exploit leverages a known vulnerability in a third-party library used by the application. Once inside, the attacker establishes a persistence mechanism by creating a scheduled task on the compromised server (T1588.001 - System Services). This task executes a simple script that downloads and installs a custom backdoor, disguised as a legitimate system utility. This backdoor provides remote access and command execution capabilities.
+
+Lateral movement occurs by leveraging valid accounts (T1078) obtained through credential stuffing – utilizing common password patterns against the organization’s Active Directory. These accounts grant limited access to internal systems, including a file server hosting sensitive customer data. The attacker then utilizes living-off-the-land binaries (T1059.001) to perform reconnaissance and identify systems with more privileged access. Specifically, they target systems with access to cloud metadata services, identifying instances with exposed IAM roles allowing excessive permissions.
+
+A key step involves harvesting additional cloud credentials (T1098.001) from these systems. This is achieved by dumping the contents of the AWS EC2 instance metadata service, revealing temporary credentials with broad permissions. These credentials are then used to assume roles with access to sensitive data stores, such as an S3 bucket containing customer financial records. The attacker carefully avoids triggering alert thresholds by limiting their activity and blending in with normal network traffic.
+
+To establish long-term persistence and ensure continued access, the attacker creates a new IAM user with overly permissive access (T1027.003 - Domain Account) and assigns it to a role with access to critical data. This user is then used to exfiltrate data (T1567.002) to a cloud storage service owned by the attackers. To cover their tracks, the attacker attempts to tamper with log files and system audit trails, deleting or altering entries related to their activity.
+
+The final impact is a significant data breach, resulting in the theft of thousands of customers’ financial information. The exfiltrated data is encrypted using a custom encryption algorithm (T1486) before being transferred to the attacker’s infrastructure. The attackers maintain persistent access to the environment, positioning themselves for future operations or ransom demands.
+
+[MATHEMATICAL EXPRESSION]
+N = {n1: Public Web Server, n2: Internal File Server, n3: AWS EC2 Instance, n4: IAM User Database, n5: S3 Bucket}
+S = {s1: Vulnerable Web Application, s2: Weak Password Policy, s3: Exposed Metadata Service, s4: Overly Permissive IAM Roles, s5: Lack of Monitoring}
+V = {v1: T1190 - Exploit Public-Facing Application, v2: T1078 - Valid Accounts, v3: T1098.001 - Additional Cloud Credentials, v4: T1567.002 - Exfiltration to Cloud Storage, v5: T1486 - Data Encrypted for Impact}
+P = {p1: n1 -> n2, n2 -> n3, n3 -> n4, n4 -> n5}
+FS = {fs1: Persistence Mechanism (Scheduled Task), fs2: Living-Off-the-Land Techniques, fs3: Log Tampering, fs4: Persistent Backdoor (IAM User)}
+
+[ATTACK GRAPH]
+1. Initial Access (T1190) - Exploit Public-Facing Application on Public Web Server
+2. Lateral Movement (T1078) - Harvest Valid Accounts through Credential Stuffing
+3. Discovery (T1059.001) - Identify Systems with Access to Cloud Metadata Services
+4. Initial Access (T1098.001) - Obtain Cloud Credentials from Compromised EC2 Instance
+5. Privilege Escalation (T1027.003) - Create Overly Permissive IAM User
+6. Data Collection (T1567.002) - Exfiltrate Sensitive Data to Attacker’s Cloud Storage
+7. Impact (T1486) - Data Encryption and Breach
+8. Coverage (fs1, fs2, fs3) - Establish Persistence, Use Living-Off-the-Land Binaries, Tamper with Logs
+9. Coverage (fs4) - Maintain Persistent Backdoor via IAM User
+
+================================================================================
+
+PROMPT P4: Impact - Ransomware / Data Exfiltration
+Path      : DUMMY-MVP-001 | Financial and insurance activities (ISIC K) | HIGH
+Techniques: T1190 - Exploit Public-Facing Application, T1078 - Valid Accounts, T1098.001 - Additional Cloud Credentials, T1567.002 - Exfiltration to Cloud Storage, T1486 - Data Encrypted for Impact
+
+BASELINE OUTPUT (Mistral-7B, no fine-tuning)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+The MVP Test Campaign (DUMMY-MVP-001) targets the financial and insurance industry with a high-level attack, focusing on ransomware and data exfiltration during the impact phase.
+
+Initial Access:
+- An unpatched vulnerability in an internet-facing application (T1190) allows the adversary to gain entry into the system.
+
+Initial Discovery and Reconnaissance:
+- The adversary conducts thorough reconnaissance on the internal network, mapping out critical assets and services (T1087.001 - Network Scanning).
+
+Lateral Movement:
+- The attacker exploits valid accounts within the internal network to move laterally, gaining access to additional resources (T1078).
+
+Credential Harvesting:
+- The adversary discovers and steals additional cloud credentials from the compromised account, expanding their reach (T1098.001).
+
+Data Staging:
+- The attacker begins to exfiltrate sensitive data from cloud storage services, encrypting it locally for later use (T1567.002).
+
+Encryption:
+- Once a significant amount of data has been staged, the attacker deploys ransomware, encrypting all accessible data on the internal network and cloud infrastructure (T1486).
+
+Business Impact:
+- With the encrypted data and the threat of data exposure, the organization faces potential financial losses, reputational damage, and regulatory penalties, depending on the nature and quantity of the stolen information.
+
+[MATHEMATICAL EXPRESSION]
+G = (N, S, V, P, FS) where N = {Internet-facing application, Internal network, Cloud metadata services, Data egress points, Cloud APIs}, S = {Exploit public-facing application, Network scanning, Valid accounts, Cloud credential theft, Data exfiltration, Data encryption, Ransomware deployment}, V = {T1190, T1087.001, T1078, T1098.001, T1567.002, T1486}, P = {Initial access, Initial discovery and reconnaissance, Lateral movement, Credential harvesting, Data staging, Encryption, Business impact}, FS = {Internet-facing application, Internal network, Cloud metadata services, Data egress points}
+
+[ATTACK GRAPH]
+1. Exploit Public-Facing Application (T1190)
+2. Network Scanning (T1087.001)
+3. Valid Accounts (T1078)
+4. Cloud Credential Theft (T1098.001)
+5. Data Exfiltration (T1567.002)
+6. Data Encryption (T1486)
+7. Ransomware Deployment (Impact Phase)
+
+FINE-TUNED OUTPUT (Mistral-7B + LoRA adapter)
+--------------------------------------------------------------------------------
+[NATURAL LANGUAGE]
+The attack begins with a successful exploit of a publicly facing web application (T1190) within the financial institution’s customer portal. This application, while not critical to core banking operations, contains sensitive customer data including financial account numbers, addresses, and email addresses. The initial foothold grants access to a valid account (T1078) with limited privileges, specifically designed for customer service representatives. This account is not flagged for elevated monitoring due to its perceived low risk. Once inside, the attacker leverages the compromised account to harvest additional cloud credentials stored in plaintext within a misconfigured database (T1098.001). These credentials provide access to a set of virtual machines (VMs) used for data processing and backup.
+
+Lateral movement occurs through exploiting overly permissive IAM roles assigned to the compromised VM. The attacker gains access to a central metadata service, allowing them to enumerate other cloud resources and identify the storage bucket containing customer data. A key misconfiguration here is the lack of multi-factor authentication (MFA) on the metadata service, making it easier to compromise. With access to the storage bucket, the attacker begins staging data for exfiltration (T1567.002). They compress and encrypt the data using a custom ransomware variant (T1486), mirroring the tactics of well-known threat actors like Ryuk and Conti.
+
+The ransomware is then deployed across the remaining VMs, encrypting critical data and systems. The financial institution’s backup strategy, relying on tape storage, proves ineffective against this attack. The attacker simultaneously initiates exfiltration of the encrypted data to a cloud storage account controlled by the attackers. The data is compartmentalized and encrypted, making it difficult for security teams to decipher the contents without the attacker’s decryption key. The attacker demands a significant ransom in exchange for the decryption key and the return of the stolen data.
+
+The business impact is severe. The financial institution faces regulatory fines for data protection violations, reputational damage, and potential legal liabilities for exposing customer data. The ransom demand further strains the organization’s financial resources. The delay in restoring operations leads to lost revenue, customer dissatisfaction, and potential long-term financial instability. The exfiltrated data could be used for identity theft, financial fraud, or extortion. The attackers’ ability to move laterally and escalate privileges underscores the importance of robust IAM policies and secure configuration management practices.
+
+[MATHEMATICAL EXPRESSION]
+N = {n1: Public Web Application, n2: Customer Service Account, n3: Database, n4: VM1 (Data Processing), n5: Metadata Service, n6: Storage Bucket (Customer Data), n7: Attacker’s Cloud Account}
+S = {s1: Weak Authentication (Application), s2: Stored Plaintext Credentials, s3: Overly Permissive IAM Roles, s4: Lack of MFA on Metadata Service, s5: Outdated Backup Strategy}
+V = {v1: Exploit Public-Facing Application (T1190), v2: Harvest Additional Cloud Credentials (T1098.001), v3: Lateral Movement (T1021.001), v4: Enumeration of Cloud Resources (T1018), v5: Data Encryption (T1486), v6: Exfiltration to Cloud Storage (T1567.002)}
+P = {p1: Valid Accounts, p2: Cloud Credentials, p3: IAM Permissions, p4: Metadata Service Access, p5: Storage Bucket Access}
+FS = {fs1: Internet-Facing Services, fs2: Internal Network / Cloud Metadata Services, fs3: OS / IAM Permission Model, fs4: Data Egress Points / Cloud APIs}
+
+[ATTACK GRAPH]
+1. Initial Access (T1190) - Successful exploit of publicly facing web application.
+2. Harvest Additional Credentials (T1098.001) - Compromised account used to access cloud credentials stored in database.
+3. Lateral Movement (T1021.001) - Utilize compromised credentials to gain access to VM1.
+4. Enumeration of Cloud Resources (T1018) - Exploit access to metadata service to identify other cloud resources.
+5. Data Staging (T1567.002) - Begin staging data for exfiltration, compressing and encrypting it.
+6. Privilege Escalation (T1021.001) - Leverage access to metadata service to enumerate IAM roles and assume higher privileges.
+7. Data Encryption (T1486) - Encrypt the staged data before exfiltration.
+8. Exfiltration (T1567.002) - Initiate exfiltration to attacker’s cloud account.
+9. Ransomware Deployment (T1486) - Deploy ransomware across remaining VMs.
+1
+
+================================================================================
+
