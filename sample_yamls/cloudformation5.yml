@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Capstone sample account. Deliberately misconfigured: an open security group fronting a public
+  instance whose role can reach the data, plus an escalation chain through two IAM roles.'
+Resources:
+  InsecureS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: insecure-public-bucket-demo
+      AccessControl: PublicRead
+  PublicBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: InsecureS3Bucket
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal: '*'
+          Action: s3:*
+          Resource: '*'
+  OpenSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open to the world
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: 3389
+        ToPort: 3389
+        CidrIp: 0.0.0.0/0
+  PublicEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0abcdef1234567890
+      InstanceType: t2.micro
+      SecurityGroupIds:
+      - OpenSecurityGroup
+      IamInstanceProfile: OverPermissiveInstanceProfile
+      AssociatePublicIpAddress: true
+  OverPermissiveInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: overly-permissive-profile
+      Roles:
+      - OverPermissiveRole
+  OverPermissiveRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: overly-permissive-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: '*'
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: admin-access
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: '*'
+            Resource: '*'
+  PublicRDS:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: insecure-db
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      MasterUsername: admin
+      MasterUserPassword: password123
+      PubliclyAccessible: true
+  OpenLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: open-lb
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+      - subnet-12345678
+      - subnet-87654321
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Application tier, SSH left open
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+  AppServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0fedcba9876543210
+      InstanceType: t3.small
+      SecurityGroupIds:
+      - AppSecurityGroup
+      IamInstanceProfile: AppInstanceProfile
+      AssociatePublicIpAddress: true
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: app-server-profile
+      Roles:
+      - AppServerRole
+  AppServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: app-server-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: deploy-helper
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - iam:PassRole
+            - lambda:CreateFunction
+            - lambda:InvokeFunction
+            Resource: DeploymentRole
+  DeploymentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: deployment-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: deployment-permissions
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - iam:AttachRolePolicy
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+            Resource: '*'
+  IngestFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: reports-ingest
+      Runtime: python3.11
+      Handler: index.handler
+      Role: DeploymentRole
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: customer-reports
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: false
