@@ -1,51 +1,24 @@
-"""
-prompt_generator.py
---------------------
-MVP Prompt Generator for the Scenario Generation Module.
-
-Pipeline:
-  1. A PromptGenerator selects from 4 structured cybersec prompts.
-  2. Each prompt + a dummy attack path is sent to the fine-tuned Mistral-7B
-     (LoRA adapter stored in fine_tuning/output/).
-  3. The generated tri-modal scenario (Natural Language + Math + Attack Graph)
-     is printed to terminal and saved as both .csv and .txt.
-
-Usage (run from scenario_generation/):
-    python prompt_generator.py
-    python prompt_generator.py --base_model mistralai/Mistral-7B-Instruct-v0.3 \\
-                               --adapter_path fine_tuning/output \\
-                               --output_prefix results/prompt_gen_output
-
-Future extension:
-    Replace STRUCTURED_PROMPTS with a fine-tuned prompt-generation LLM that
-    derives context-aware prompts directly from scored attack paths.
-
-Requirements:
-    pip install torch transformers peft bitsandbytes accelerate
-"""
+"""prompt_generator.py"""
 
 import argparse
 import csv
 import gc
-import os
+import json
 import sys
 from pathlib import Path
 
-import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+# Shared canonical prompt builder (the same one training used) — keeps the
+sys.path.insert(0, str(Path(__file__).resolve().parent / "fine_tuning"))
+import prompt_format  # noqa: E402
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
 BASE_MODEL_DEFAULT  = "mistralai/Mistral-7B-Instruct-v0.3"
 ADAPTER_PATH_DEFAULT = "fine_tuning/output"
 MAX_NEW_TOKENS       = 1200
+MAX_INPUT_TOKENS     = 2048          # matches finetuning.MAX_SEQ_LEN
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# The System Instruction — mirrors exactly what the model was trained on.
 # ─────────────────────────────────────────────────────────────────────────────
 
 SYSTEM_INSTRUCTION = (
@@ -65,12 +38,6 @@ SYSTEM_INSTRUCTION = (
 )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Structured Prompt Library
-# Each entry is a dict with:
-#   "prompt_id"   : human-readable ID
-#   "focus"       : short label for what angle this prompt emphasises
-#   "user_context": the context block appended to the attack path, guiding tone
 # ─────────────────────────────────────────────────────────────────────────────
 
 STRUCTURED_PROMPTS = [
@@ -135,37 +102,71 @@ STRUCTURED_PROMPTS = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Dummy Attack Path — a realistic MITRE-based path used for MVP testing.
-# In the real system this comes from the scored graph-path ranking module.
+
+ATTACK_PATH_KEYS = (
+    "source_id",
+    "source_name",
+    "industry",
+    "attack_level",
+    "techniques",
+    "surfaces",
+
+    # Added with the exporter's objectives layer. The same hops are a different
+    # scenario depending on what the attacker does at the end — reading a
+    # database, encrypting it, or flooding it — and this is the only field that
+    # says which. Without it the model would write a data-theft narrative for a
+    # ransomware path.
+    "objective",
+)
+
+
+def load_attack_paths(path: Path) -> list:
+    """Load ranked attack paths from the exported JSON list, worst first."""
+    if not path.exists():
+        raise FileNotFoundError(
+            f"attack paths file not found: {path}\n"
+            "    Generate it in the infrastructure repo with:\n"
+            "        python3 -m runner.graph_runner\n"
+            "    then pass its output/attack_paths.json via --attack_paths."
+        )
+
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, list):
+        raise ValueError(
+            f"{path}: expected a JSON list of attack paths, got "
+            f"{type(data).__name__}"
+        )
+
+    if not data:
+        raise ValueError(
+            f"{path}: the export contains no attack paths. The graph found "
+            "nothing exploitable — check the findings and edges upstream "
+            "before generating scenarios."
+        )
+
+    for i, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: entry {i} is not a JSON object")
+        missing = [key for key in ATTACK_PATH_KEYS if key not in entry]
+        if missing:
+            raise ValueError(
+                f"{path}: entry {i} is missing required key(s) "
+                f"{', '.join(missing)} — the prompt template reads all of "
+                f"{', '.join(ATTACK_PATH_KEYS)}. Re-run the exporter."
+            )
+
+    return data
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 
-DUMMY_ATTACK_PATH = {
-    "source_id"    : "DUMMY-MVP-001",
-    "source_name"  : "MVP Test Campaign",
-    "industry"     : "Financial and insurance activities (ISIC K)",
-    "attack_level" : "HIGH",
-    "techniques"   : (
-        "T1190 - Exploit Public-Facing Application, "
-        "T1078 - Valid Accounts, "
-        "T1098.001 - Additional Cloud Credentials, "
-        "T1567.002 - Exfiltration to Cloud Storage, "
-        "T1486 - Data Encrypted for Impact"
-    ),
-    "surfaces"     : (
-        "Internet-facing services / user endpoints, "
-        "Internal network / cloud metadata services, "
-        "OS / IAM permission model, "
-        "Data egress points / cloud APIs"
-    ),
-}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def build_bnb_config() -> BitsAndBytesConfig:
+def build_bnb_config():
     """4-bit QLoRA quantisation — same config used during fine-tuning."""
+    import torch
+    from transformers import BitsAndBytesConfig
+
     return BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -174,31 +175,42 @@ def build_bnb_config() -> BitsAndBytesConfig:
     )
 
 
-def format_model_input(prompt_entry: dict, attack_path: dict) -> str:
-    """
-    Build the [INST] ... [/INST] prompt that the model expects.
-    The 'input' block mirrors the training data format exactly.
-    """
-    input_block = (
+def build_input_block(prompt_entry: dict, attack_path: dict) -> str:
+    """Build the record's ``input`` block — the facts half of the prompt."""
+    return (
         f"SOURCE: {attack_path['source_name']} ({attack_path['source_id']})\n"
         f"INDUSTRY: {attack_path['industry']}\n"
         f"ATTACK LEVEL: {attack_path['attack_level']}\n"
         f"TECHNIQUES: {attack_path['techniques']}\n"
-        f"SURFACES: {attack_path['surfaces']}\n\n"
+        f"SURFACES: {attack_path['surfaces']}\n"
+        f"OBJECTIVE: {attack_path['objective']}\n\n"
         f"PROMPT FOCUS: {prompt_entry['focus']}\n"
         f"{prompt_entry['user_context']}"
     )
-    return f"[INST] {SYSTEM_INSTRUCTION}\n\n{input_block} [/INST]"
 
 
-def generate_text(model, tokenizer, prompt: str) -> str:
-    """Run greedy/sampling generation and strip the echoed prompt prefix."""
+def format_model_input(prompt_entry: dict, attack_path: dict, tokenizer=None) -> str:
+    """Return the generation prompt for one (prompt, attack path) pair — the"""
+    record = {
+        "instruction": SYSTEM_INSTRUCTION,
+        "input": build_input_block(prompt_entry, attack_path),
+    }
+    return prompt_format.build_chat(record, tokenizer, for_training=False)
+
+
+def generate_text(model, tokenizer, prompt_entry: dict, attack_path: dict) -> str:
+    """Generate one scenario and return only the newly generated text."""
+    import torch
+
+    prompt = format_model_input(prompt_entry, attack_path, tokenizer)
     inputs = tokenizer(
         prompt,
         return_tensors="pt",
         truncation=True,
-        max_length=2048,
+        max_length=MAX_INPUT_TOKENS,
+        add_special_tokens=False,
     ).to(model.device)
+    n = inputs["input_ids"].shape[1]
 
     with torch.no_grad():
         output_ids = model.generate(
@@ -212,18 +224,12 @@ def generate_text(model, tokenizer, prompt: str) -> str:
             pad_token_id=tokenizer.pad_token_id,
         )
 
-    decoded = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    # Strip the prompt prefix that some tokeniser setups echo back
-    if decoded.startswith(prompt):
-        return decoded[len(prompt):].strip()
-    # Fallback: strip everything before [NATURAL LANGUAGE]
-    marker = "[NATURAL LANGUAGE]"
-    if marker in decoded:
-        return decoded[decoded.index(marker):].strip()
-    return decoded.strip()
+    return tokenizer.decode(output_ids[0][n:], skip_special_tokens=True).strip()
 
 
 def cleanup_memory(model=None, tokenizer=None):
+    import torch
+
     if model is not None:
         del model
     if tokenizer is not None:
@@ -250,7 +256,7 @@ def save_results_txt(results: list[dict], path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     sep = "=" * 80
     with path.open("w", encoding="utf-8") as f:
-        f.write("PROMPT GENERATOR MVP — SCENARIO GENERATION OUTPUT\n")
+        f.write("PROMPT GENERATOR — SCENARIO GENERATION OUTPUT\n")
         f.write(f"{sep}\n\n")
         for r in results:
             f.write(f"PROMPT ID    : {r['prompt_id']}\n")
@@ -265,12 +271,10 @@ def save_results_txt(results: list[dict], path: Path):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CLI
-# ─────────────────────────────────────────────────────────────────────────────
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Prompt Generator MVP — cybersec scenario generation via fine-tuned Mistral-7B"
+        description="Prompt Generator — tri-modal scenario generation over ranked attack paths via fine-tuned Mistral-7B"
     )
     parser.add_argument(
         "--base_model",
@@ -288,24 +292,53 @@ def parse_args() -> argparse.Namespace:
         help="Output file prefix — produces <prefix>.csv and <prefix>.txt (default: results/prompt_gen_output)",
     )
     parser.add_argument(
+        "--attack_paths",
+        required=True,
+        help="Path to the ranked attack paths exported by the infrastructure repo's "
+             "runner/graph_runner.py (output/attack_paths.json) — a JSON list whose entries "
+             "carry source_id, source_name, industry, attack_level, techniques, surfaces. "
+             "Every prompt is run against every path in the file",
+    )
+    parser.add_argument(
         "--prompt_ids",
         nargs="+",
         default=None,
         help="Run only specific prompt IDs, e.g. --prompt_ids P1 P3  (default: all)",
     )
+    parser.add_argument(
+        "--path_ids",
+        nargs="+",
+        default=None,
+        help="Run only specific attack-path source IDs, e.g. --path_ids AP-001 AP-002 "
+             "(default: all paths in the file)",
+    )
     return parser.parse_args()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main
 # ─────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
     args = parse_args()
 
     adapter_path  = Path(args.adapter_path)
+    attack_paths_path = Path(args.attack_paths)
     output_csv    = Path(f"{args.output_prefix}.csv")
     output_txt    = Path(f"{args.output_prefix}.txt")
+
+    # ── Attack paths, before anything expensive happens ───────────────────────
+    try:
+        attack_paths = load_attack_paths(attack_paths_path)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
+        print(f"[!] Could not load attack paths: {e}")
+        sys.exit(1)
+
+    if args.path_ids:
+        wanted = set(args.path_ids)
+        attack_paths = [p for p in attack_paths if p["source_id"] in wanted]
+        if not attack_paths:
+            print(f"[!] None of the requested path IDs {args.path_ids} matched "
+                  f"{attack_paths_path}.")
+            sys.exit(1)
 
     # Filter prompt list if --prompt_ids was specified
     prompts_to_run = STRUCTURED_PROMPTS
@@ -319,14 +352,17 @@ def main() -> None:
 
     print()
     print("=" * 70)
-    print("  PROMPT GENERATOR MVP — Intelligent Cloud Security Testing")
+    print("  PROMPT GENERATOR — Intelligent Cloud Security Testing")
     print("  Synthetic Cyber Attack Scenario Generation")
     print("=" * 70)
     print(f"  Base model   : {args.base_model}")
     print(f"  Adapter path : {adapter_path}")
+    print(f"  Attack paths : {attack_paths_path} ({len(attack_paths)} paths)")
     print(f"  Output CSV   : {output_csv}")
     print(f"  Output TXT   : {output_txt}")
     print(f"  Prompts      : {[p['prompt_id'] for p in prompts_to_run]}")
+    print(f"  Paths        : {[p['source_id'] for p in attack_paths]}")
+    print(f"  Generations  : {len(prompts_to_run) * len(attack_paths)}")
     print("=" * 70)
     print()
 
@@ -335,10 +371,14 @@ def main() -> None:
         print("    Run this script from the scenario_generation/ directory.")
         sys.exit(1)
 
+    # ── Load model ────────────────────────────────────────────────────────────
+    import torch
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
     if not torch.cuda.is_available():
         print("[!] WARNING: No GPU detected. Generation will be very slow on CPU.")
 
-    # ── Load model ────────────────────────────────────────────────────────────
     print("[*] Loading base model in 4-bit (QLoRA)…")
     bnb_config = build_bnb_config()
 
@@ -369,38 +409,46 @@ def main() -> None:
 
     # ── Generation loop ───────────────────────────────────────────────────────
     results = []
+    total = len(prompts_to_run) * len(attack_paths)
+    i = 0
 
-    for i, prompt_entry in enumerate(prompts_to_run, 1):
-        pid    = prompt_entry["prompt_id"]
-        focus  = prompt_entry["focus"]
+    for attack_path in attack_paths:
+        for prompt_entry in prompts_to_run:
+            i += 1
+            pid    = prompt_entry["prompt_id"]
+            focus  = prompt_entry["focus"]
 
-        print(f"{'─'*70}")
-        print(f"[{i}/{len(prompts_to_run)}] Running Prompt {pid}: {focus}")
-        print(f"{'─'*70}")
+            print(f"{'─'*70}")
+            print(f"[{i}/{total}] Path {attack_path['source_id']} "
+                  f"({attack_path['attack_level']}) × Prompt {pid}: {focus}")
+            print(f"    {attack_path['source_name']}")
+            print(f"{'─'*70}")
 
-        full_prompt = format_model_input(prompt_entry, DUMMY_ATTACK_PATH)
+            # Recorded for the CSV. generate_text() rebuilds it through the same
+            full_prompt = format_model_input(prompt_entry, attack_path, tokenizer)
 
-        print("[*] Generating scenario…")
-        scenario = generate_text(finetuned_model, tokenizer, full_prompt)
+            print("[*] Generating scenario…")
+            scenario = generate_text(
+                finetuned_model, tokenizer, prompt_entry, attack_path)
 
-        # ── Terminal preview ──────────────────────────────────────────────────
-        print("\n┌── GENERATED SCENARIO (preview first 600 chars) ──────────────┐")
-        preview = scenario[:600] + ("\n  …[truncated]" if len(scenario) > 600 else "")
-        for line in preview.splitlines():
-            print(f"│  {line}")
-        print("└──────────────────────────────────────────────────────────────┘\n")
+            # ── Terminal preview ──────────────────────────────────────────────
+            print("\n┌── GENERATED SCENARIO (preview first 600 chars) ──────────────┐")
+            preview = scenario[:600] + ("\n  …[truncated]" if len(scenario) > 600 else "")
+            for line in preview.splitlines():
+                print(f"│  {line}")
+            print("└──────────────────────────────────────────────────────────────┘\n")
 
-        results.append({
-            "prompt_id"          : pid,
-            "focus"              : focus,
-            "attack_path_id"     : DUMMY_ATTACK_PATH["source_id"],
-            "industry"           : DUMMY_ATTACK_PATH["industry"],
-            "attack_level"       : DUMMY_ATTACK_PATH["attack_level"],
-            "techniques"         : DUMMY_ATTACK_PATH["techniques"],
-            "surfaces"           : DUMMY_ATTACK_PATH["surfaces"],
-            "full_prompt"        : full_prompt,
-            "generated_scenario" : scenario,
-        })
+            results.append({
+                "prompt_id"          : pid,
+                "focus"              : focus,
+                "attack_path_id"     : attack_path["source_id"],
+                "industry"           : attack_path["industry"],
+                "attack_level"       : attack_path["attack_level"],
+                "techniques"         : attack_path["techniques"],
+                "surfaces"           : attack_path["surfaces"],
+                "full_prompt"        : full_prompt,
+                "generated_scenario" : scenario,
+            })
 
     # ── Cleanup ───────────────────────────────────────────────────────────────
     print("[*] Unloading model and clearing GPU cache…")

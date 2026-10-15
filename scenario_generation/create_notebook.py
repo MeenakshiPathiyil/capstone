@@ -1,594 +1,558 @@
 """
 create_notebook.py
-------------------
-Run this script once locally to generate colab_prompt_gen.ipynb.
+-------------------
+Regenerate every Colab/Kaggle notebook from the .py sources, which are the single
+source of truth. The notebooks no longer re-implement training/inference/prompt
+logic inline (that was how prompt drift crept back in). Instead each notebook
+*ships* the fixed repo modules (prompt_format.py, data_split.py, finetuning.py,
+run_inference.py, fine_tune.py) into the runtime and then runs them — so the
+prompt and pipeline can never diverge from what training used.
 
     python create_notebook.py
 
-Then upload colab_prompt_gen.ipynb to Google Colab.
+Generates (next to this script):
+    colab_finetune_setup.ipynb   - QLoRA training: runs fine_tune.py
+    finetune_output_test.ipynb   - inference: runs run_inference.py on held-out
+    kaggle_prompt_gen.ipynb      - baseline vs fine-tuned comparison + metrics
+    kaggle_compare_models.ipynb  - fine-tuned Mistral vs RedSage Qwen, runs compare_models.py
+    colab_compare_models.ipynb   - the same comparison for Colab
 """
+
 import json
+import sys
 from pathlib import Path
 
-# ── Cell sources ──────────────────────────────────────────────────────────────
+HERE = Path(__file__).resolve().parent          # scenario_generation/
+FT = HERE / "fine_tuning"
+EVAL = HERE / "evaluation"
+DATASET = HERE / "dataset" / "training_data.jsonl"
+TEST_INPUTS = EVAL / "test_inputs.jsonl"
 
-MD_INTRO = """# Prompt Generator MVP — Baseline vs Fine-Tuned
-**Intelligent Cloud Security Testing | Synthetic Cyber Attack Scenario Generation**
+sys.path.insert(0, str(FT))
+import data_split  # noqa: E402
 
----
 
-## ⚠️ Setup (BEFORE running any cell)
-1. **Accelerator → GPU T4 x2** (already set if you opened this notebook with T4 x2)
-2. Confirm the **finetuned** dataset is attached under **Input** (it should show `/kaggle/input/finetuned/`)
-3. Run cells **in order: 1 → 2 → 3 → 4 → 5 → 6 → 7**
+# ── helpers ─────────────────────────────────────────────────────────────────
 
-> The base model `mistralai/Mistral-7B-Instruct-v0.3` (~14 GB) downloads automatically from HuggingFace.
-> Adapter files are loaded directly from `/kaggle/input/finetuned/` — no manual upload needed.
+def read(path) -> str:
+    return Path(path).read_text(encoding="utf-8")
 
-**Outputs** (saved to `/kaggle/working/`):
-- `prompt_gen_comparison.csv`
-- `prompt_gen_comparison.txt`
 
-Download them from the **Output** tab on the right after the notebook finishes.
-"""
+def pyliteral(text: str) -> str:
+    """A valid Python string literal whose value is exactly `text`.
 
-CELL1 = """# Cell 1 — MUST run first after every session restart
-# Sets PYTORCH_ALLOC_CONF before CUDA initialises — prevents OOM fragmentation
-import os
-os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'
+    Non-ASCII stays raw: json escapes an emoji as a surrogate pair, which Python
+    reads back as two lone surrogates that write_text cannot encode.
+    """
+    return json.dumps(text, ensure_ascii=False)
 
-import torch
-print('CUDA available:', torch.cuda.is_available())
-if torch.cuda.is_available():
-    n_gpus = torch.cuda.device_count()
-    print(f'GPUs found: {n_gpus}')
-    for i in range(n_gpus):
-        free, total = torch.cuda.mem_get_info(i)
-        print(f'  GPU {i}: {torch.cuda.get_device_name(i)} | Free: {free/1e9:.2f} GB / {total/1e9:.2f} GB')
-    free0 = torch.cuda.mem_get_info(0)[0] / 1e9
-    if free0 < 10:
-        print('WARNING: GPU 0 has less than 10 GB free. Consider restarting the session.')
-    else:
-        print('OK: Ready. Mistral-7B 4-bit needs ~4.5 GB VRAM per GPU.')
-else:
-    print('ERROR: No GPU detected. Enable GPU T4 x2 in Kaggle accelerator settings.')
-"""
 
-CELL2 = """# Cell 2 — Install dependencies
-!pip install -q transformers>=4.40.0 peft>=0.10.0 bitsandbytes>=0.43.0 accelerate>=0.28.0
-print('Done.')
-"""
+def md_cell(source, cid):
+    return {"cell_type": "markdown", "id": cid, "metadata": {}, "source": source}
 
-CELL3 = """# Cell 3 — Auto-discover adapter files inside /kaggle/input/
-import os
 
-REQUIRED_FILES = [
-    'adapter_config.json',
-    'adapter_model.safetensors',
-    'tokenizer.json',
-    'tokenizer_config.json',
-    'chat_template.jinja',
-]
-
-# ── Step 1: Show full /kaggle/input/ tree (for debugging) ──────────────────
-print('=== /kaggle/input/ directory tree ===')
-for root, dirs, files in os.walk('/kaggle/input'):
-    depth = root.replace('/kaggle/input', '').count(os.sep)
-    indent = '  ' * depth
-    print(f'{indent}{os.path.basename(root)}/')
-    for f in files:
-        print(f'{indent}  {f}')
-print()
-
-# ── Step 2: Auto-locate the directory that contains all required files ─────
-def find_adapter_dir(base='/kaggle/input'):
-    # Walk base and return the first dir that contains all REQUIRED_FILES
-    for root, dirs, files in os.walk(base):
-        if all(f in files for f in REQUIRED_FILES):
-            return root
-    return None
-
-ADAPTER_DIR = find_adapter_dir()
-
-if ADAPTER_DIR is None:
-    print('ERROR: Could not find a directory containing all 5 adapter files.')
-    print('Make sure the "finetuned" dataset is attached under Input.')
-else:
-    print(f'Found adapter files at: {ADAPTER_DIR}')
-    for fname in REQUIRED_FILES:
-        fpath = os.path.join(ADAPTER_DIR, fname)
-        sz = os.path.getsize(fpath)
-        print(f'  OK  {fname}  ({sz:,} bytes)')
-    # Persist the resolved path so Cell 4 can read it
-    with open('/kaggle/working/.adapter_dir', 'w') as _f:
-        _f.write(ADAPTER_DIR)
-    print()
-    print('All 5 adapter files found. Run Cell 4.')
-"""
-
-CELL4 = """# Cell 4 — Config, prompts, and helper functions
-import gc, csv, time, torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel
-
-BASE_MODEL   = 'mistralai/Mistral-7B-Instruct-v0.3'
-OUTPUT_DIR   = '/kaggle/working'
-
-# Read adapter path discovered by Cell 3
-_adapter_ptr = '/kaggle/working/.adapter_dir'
-if os.path.exists(_adapter_ptr):
-    with open(_adapter_ptr) as _f:
-        ADAPTER_PATH = _f.read().strip()
-    print(f'Adapter path: {ADAPTER_PATH}')
-else:
-    ADAPTER_PATH = '/kaggle/input/finetuned'   # fallback
-    print(f'WARNING: .adapter_dir not found, using fallback: {ADAPTER_PATH}')
-MAX_NEW_TOKENS = 1200
-OUTPUT_CSV     = os.path.join(OUTPUT_DIR, 'prompt_gen_comparison.csv')
-OUTPUT_TXT     = os.path.join(OUTPUT_DIR, 'prompt_gen_comparison.txt')
-
-# Mirrors the training data instruction format exactly
-SYSTEM_INSTRUCTION = '''You are a senior cybersecurity red team expert specializing in cloud infrastructure attacks.
-Your task is to generate detailed, technically accurate cyber attack scenarios in a strict tri-modal format.
-
-CRITICAL FORMATTING RULES:
-1. Your response MUST start immediately with the line: [NATURAL LANGUAGE]
-2. Do NOT use markdown. No **, no ##, no *, no backticks, no bold, no headers.
-3. The three section headers must appear EXACTLY as plain text on their own line:
-   [NATURAL LANGUAGE]
-   [MATHEMATICAL EXPRESSION]
-   [ATTACK GRAPH]
-4. Never skip a section. Never add a preamble before [NATURAL LANGUAGE].
-5. Use real MITRE ATT&CK technique IDs exactly as provided.
-6. The mathematical expression must follow G = (N, S, V, P, FS) notation exactly.
-7. The attack graph must list numbered stages with plain text arrows (->) .'''
-
-STRUCTURED_PROMPTS = [
-    {
-        'prompt_id': 'P1',
-        'focus': 'Full Tri-Modal Scenario (Standard)',
-        'user_context': '''Generate a complete tri-modal cyber attack scenario for the attack path above.
-Produce all three sections:
-  [NATURAL LANGUAGE]  - Step-by-step narrative referencing each MITRE technique ID inline.
-  [MATHEMATICAL EXPRESSION] - G = (N, S, V, P, FS) notation.
-  [ATTACK GRAPH] - Numbered stages with plain-text arrows (->) .'''
-    },
-    {
-        'prompt_id': 'P2',
-        'focus': 'Cloud-Centric IAM Abuse',
-        'user_context': '''Generate a tri-modal scenario focused on cloud IAM misconfigurations.
-In [NATURAL LANGUAGE]: detail IAM role abuse, service account compromise, and metadata API exploitation.
-Reference each MITRE technique ID inline.
-In [MATHEMATICAL EXPRESSION]: model IAM roles as explicit nodes in G = (N, S, V, P, FS).
-In [ATTACK GRAPH]: trace each stage from endpoint to cloud control plane to final impact.'''
-    },
-    {
-        'prompt_id': 'P3',
-        'focus': 'Stealth and Persistence (APT-Style)',
-        'user_context': '''Generate a tri-modal scenario modelled on a long-dwell APT campaign.
-In [NATURAL LANGUAGE]: describe slow credential harvesting, living-off-the-land techniques,
-log tampering, and persistent backdoors. Reference each MITRE technique ID inline.
-In [MATHEMATICAL EXPRESSION]: highlight persistence nodes in G = (N, S, V, P, FS).
-In [ATTACK GRAPH]: full kill chain from initial compromise to final impact.'''
-    },
-    {
-        'prompt_id': 'P4',
-        'focus': 'Impact - Ransomware / Data Exfiltration',
-        'user_context': '''Generate a tri-modal scenario focused on the impact phase.
-In [NATURAL LANGUAGE]: brief initial access, then rich detail on data staging,
-encryption, exfiltration, and business impact. Reference each MITRE technique ID inline.
-In [MATHEMATICAL EXPRESSION]: include egress nodes in G = (N, S, V, P, FS).
-In [ATTACK GRAPH]: name the final stage explicitly (e.g. Ransomware Deployment, Data Breach).'''
-    },
-]
-
-# Dummy attack path — replace with real scored paths once graph module is complete
-DUMMY_ATTACK_PATH = {
-    'source_id'   : 'DUMMY-MVP-001',
-    'source_name' : 'MVP Test Campaign',
-    'industry'    : 'Financial and insurance activities (ISIC K)',
-    'attack_level': 'HIGH',
-    'techniques'  : (
-        'T1190 - Exploit Public-Facing Application, '
-        'T1078 - Valid Accounts, '
-        'T1098.001 - Additional Cloud Credentials, '
-        'T1567.002 - Exfiltration to Cloud Storage, '
-        'T1486 - Data Encrypted for Impact'
-    ),
-    'surfaces': (
-        'Internet-facing services / user endpoints, '
-        'Internal network / cloud metadata services, '
-        'OS / IAM permission model, '
-        'Data egress points / cloud APIs'
-    ),
-}
-
-def build_bnb():
-    return BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type='nf4',
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.float16,
-    )
-
-def format_prompt(p, ap):
-    sid, sname = ap['source_id'], ap['source_name']
-    ind, lvl   = ap['industry'], ap['attack_level']
-    tech, surf = ap['techniques'], ap['surfaces']
-    foc, ctx   = p['focus'], p['user_context']
-    block = f'''SOURCE: {sname} ({sid})
-INDUSTRY: {ind}
-ATTACK LEVEL: {lvl}
-TECHNIQUES: {tech}
-SURFACES: {surf}
-
-PROMPT FOCUS: {foc}
-{ctx}'''
-    return f'[INST] {SYSTEM_INSTRUCTION}\\n\\n{block} [/INST]'
-
-def gen(model, tokenizer, prompt):
-    # Decode only new tokens — fixes the baseline echo bug
-    inputs = tokenizer(
-        prompt, return_tensors='pt', truncation=True, max_length=2048
-    ).to(model.device)
-    n = inputs['input_ids'].shape[1]
-    with torch.no_grad():
-        out = model.generate(
-            **inputs,
-            max_new_tokens=MAX_NEW_TOKENS,
-            do_sample=True,
-            temperature=0.7,
-            top_p=0.9,
-            repetition_penalty=1.05,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id,
-        )
-    return tokenizer.decode(out[0][n:], skip_special_tokens=True).strip()
-
-def cleanup(model=None, tok=None):
-    if model is not None: del model
-    if tok   is not None: del tok
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        torch.cuda.empty_cache()
-    time.sleep(3)
-    free = torch.cuda.mem_get_info()[0] / 1e9 if torch.cuda.is_available() else 0
-    print(f'Cleared. GPU free: {free:.2f} GB')
-    print()
-
-def load_base():
-    m = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL, quantization_config=build_bnb(), device_map='auto'
-    )
-    t = AutoTokenizer.from_pretrained(BASE_MODEL)
-    if t.pad_token is None:
-        t.pad_token = t.eos_token
-    t.padding_side = 'right'
-    return m, t
-
-print('Config loaded. Run Cell 5 to start generation.')
-"""
-
-CELL5 = """# Cell 5 — Generate: Baseline then Fine-Tuned (~15-20 min on T4)
-results = []
-
-# ── Phase 1: Baseline ────────────────────────────────────────
-print('=' * 60)
-print('PHASE 1 - BASELINE Mistral-7B (no fine-tuning)')
-print('=' * 60)
-model, tok = load_base()
-model.eval()
-print('Base model loaded.')
-print()
-
-for i, p in enumerate(STRUCTURED_PROMPTS, 1):
-    pid, focus = p['prompt_id'], p['focus']
-    print(f'[{i}/4] Baseline {pid}: {focus}')
-    prompt   = format_prompt(p, DUMMY_ATTACK_PATH)
-    scenario = gen(model, tok, prompt)
-    print(f'  Preview: {scenario[:180].replace(chr(10), " ")} ...')
-    print()
-    results.append({
-        'model': 'baseline', 'prompt_id': pid, 'focus': focus,
-        'attack_path_id': DUMMY_ATTACK_PATH['source_id'],
-        'industry'      : DUMMY_ATTACK_PATH['industry'],
-        'attack_level'  : DUMMY_ATTACK_PATH['attack_level'],
-        'techniques'    : DUMMY_ATTACK_PATH['techniques'],
-        'surfaces'      : DUMMY_ATTACK_PATH['surfaces'],
-        'full_prompt'   : prompt,
-        'generated_scenario': scenario,
-    })
-
-print('Unloading baseline model...')
-cleanup(model, tok)
-
-# ── Phase 2: Fine-tuned ──────────────────────────────────────
-print('=' * 60)
-print('PHASE 2 - FINE-TUNED Mistral-7B (LoRA adapter)')
-print('=' * 60)
-model, tok = load_base()
-print(f'Attaching LoRA adapter from {ADAPTER_PATH}...')
-ft_model = PeftModel.from_pretrained(model, ADAPTER_PATH)
-ft_model.eval()
-print('Fine-tuned model ready.')
-print()
-
-for i, p in enumerate(STRUCTURED_PROMPTS, 1):
-    pid, focus = p['prompt_id'], p['focus']
-    print(f'[{i}/4] Fine-tuned {pid}: {focus}')
-    prompt   = format_prompt(p, DUMMY_ATTACK_PATH)
-    scenario = gen(ft_model, tok, prompt)
-    print(f'  Preview: {scenario[:180].replace(chr(10), " ")} ...')
-    print()
-    results.append({
-        'model': 'finetuned', 'prompt_id': pid, 'focus': focus,
-        'attack_path_id': DUMMY_ATTACK_PATH['source_id'],
-        'industry'      : DUMMY_ATTACK_PATH['industry'],
-        'attack_level'  : DUMMY_ATTACK_PATH['attack_level'],
-        'techniques'    : DUMMY_ATTACK_PATH['techniques'],
-        'surfaces'      : DUMMY_ATTACK_PATH['surfaces'],
-        'full_prompt'   : prompt,
-        'generated_scenario': scenario,
-    })
-
-print('Unloading fine-tuned model...')
-cleanup(ft_model, tok)
-
-# ── Save CSV ─────────────────────────────────────────────────
-fields = [
-    'model', 'prompt_id', 'focus', 'attack_path_id', 'industry',
-    'attack_level', 'techniques', 'surfaces', 'full_prompt', 'generated_scenario',
-]
-with open(OUTPUT_CSV, 'w', newline='', encoding='utf-8') as f:
-    w = csv.DictWriter(f, fieldnames=fields)
-    w.writeheader()
-    for r in results:
-        w.writerow({k: r.get(k, '') for k in fields})
-print(f'CSV saved: {OUTPUT_CSV}')
-
-# ── Save TXT (side-by-side comparison) ───────────────────────
-NL  = chr(10)
-SEP = '=' * 80
-DIV = '-' * 80
-base_r = {r['prompt_id']: r for r in results if r['model'] == 'baseline'}
-ft_r   = {r['prompt_id']: r for r in results if r['model'] == 'finetuned'}
-
-with open(OUTPUT_TXT, 'w', encoding='utf-8') as f:
-    f.write('PROMPT GENERATOR MVP - BASELINE vs FINE-TUNED COMPARISON' + NL)
-    f.write(SEP + NL + NL)
-    for p in STRUCTURED_PROMPTS:
-        pid, focus = p['prompt_id'], p['focus']
-        src  = DUMMY_ATTACK_PATH['source_id']
-        ind  = DUMMY_ATTACK_PATH['industry']
-        lvl  = DUMMY_ATTACK_PATH['attack_level']
-        tech = DUMMY_ATTACK_PATH['techniques']
-        f.write(f'PROMPT {pid}: {focus}' + NL)
-        f.write(f'Path      : {src} | {ind} | {lvl}' + NL)
-        f.write(f'Techniques: {tech}' + NL + NL)
-        f.write('BASELINE OUTPUT (Mistral-7B, no fine-tuning)' + NL)
-        f.write(DIV + NL)
-        f.write(base_r[pid]['generated_scenario'] + NL + NL)
-        f.write('FINE-TUNED OUTPUT (Mistral-7B + LoRA adapter)' + NL)
-        f.write(DIV + NL)
-        f.write(ft_r[pid]['generated_scenario'] + NL + NL)
-        f.write(SEP + NL + NL)
-
-print(f'TXT saved: {OUTPUT_TXT}')
-print()
-print('Done! Run Cell 6 to evaluate outputs.')
-"""
-
-CELL7 = """
-# Cell 6 — Automated Evaluation (Reference-Free, No LLM Judge)
-# Metrics:
-#   1. Structural Compliance  — are all 3 sections present and in order?
-#   2. MITRE Technique Recall — % of input technique IDs found in output
-#   3. Format Specifics       — G-notation, -> arrows, numbered stages, no markdown
-#   4. Lexical Diversity      — Distinct-1, Distinct-2, Type-Token Ratio (TTR)
-#   5. BERTScore              — semantic similarity shift (baseline vs fine-tuned)
-
-import os, re, csv
-from collections import Counter
-
-!pip install -q bert-score
-from bert_score import score as bert_score
-
-OUTPUT_DIR = '/kaggle/working'
-CSV_PATH   = os.path.join(OUTPUT_DIR, 'prompt_gen_comparison.csv')
-EVAL_CSV   = os.path.join(OUTPUT_DIR, 'eval_results.csv')
-
-SECTIONS = ['[NATURAL LANGUAGE]', '[MATHEMATICAL EXPRESSION]', '[ATTACK GRAPH]']
-MITRE_RE  = re.compile(r'T\d{4}(?:\.\d{3})?')
-G_RE      = re.compile(r'G\s*=\s*\(\s*N')
-ARROW_RE  = re.compile(r'->')
-STAGE_RE  = re.compile(r'^\d+[.)\s]', re.MULTILINE)
-MD_RE     = re.compile(r'(\*\*|^##|^#\s)', re.MULTILINE)
-
-# ── Load CSV ──
-rows = []
-with open(CSV_PATH, newline='', encoding='utf-8') as f:
-    for r in csv.DictReader(f):
-        rows.append(r)
-print(f'Loaded {len(rows)} rows from {CSV_PATH}')
-
-baseline_rows = [r for r in rows if r['model'] == 'baseline']
-ft_rows       = [r for r in rows if r['model'] == 'finetuned']
-
-# ── Helper functions ──
-
-def structural_score(text):
-    found = [s for s in SECTIONS if s in text]
-    return len(found), (found == SECTIONS)
-
-def mitre_recall(text, technique_str):
-    input_ids = set(MITRE_RE.findall(technique_str))
-    if not input_ids:
-        return 1.0
-    return round(len(input_ids & set(MITRE_RE.findall(text))) / len(input_ids), 4)
-
-def format_checks(text):
-    return (bool(G_RE.search(text)),
-            len(ARROW_RE.findall(text)),
-            len(STAGE_RE.findall(text)),
-            len(MD_RE.findall(text)))
-
-def lexical_diversity(text):
-    tokens = re.findall(r'\b\w+\b', text.lower())
-    if len(tokens) < 2:
-        return 0.0, 0.0, 0.0
-    bigrams = [f'{tokens[i]}_{tokens[i+1]}' for i in range(len(tokens)-1)]
-    d1  = round(len(set(tokens))  / len(tokens), 4)
-    d2  = round(len(set(bigrams)) / len(bigrams), 4) if bigrams else 0.0
-    ttr = round(len(set(tokens))  / len(tokens), 4)
-    return d1, d2, ttr
-
-# ── Per-row metrics ──
-eval_rows = []
-for row in rows:
-    text    = row['generated_scenario']
-    n_secs, ordered          = structural_score(text)
-    g_ok, arrows, stg, md   = format_checks(text)
-    d1, d2, ttr              = lexical_diversity(text)
-    eval_rows.append({
-        'model'             : row['model'],
-        'prompt_id'         : row['prompt_id'],
-        'focus'             : row['focus'],
-        'sections_found'    : n_secs,
-        'sections_in_order' : int(ordered),
-        'mitre_recall'      : mitre_recall(text, row['techniques']),
-        'g_notation_ok'     : int(g_ok),
-        'arrow_count'       : arrows,
-        'numbered_stages'   : stg,
-        'markdown_hits'     : md,
-        'distinct_1'        : d1,
-        'distinct_2'        : d2,
-        'ttr'               : ttr,
-        'word_count'        : len(text.split()),
-        'bert_P'            : '',
-        'bert_R'            : '',
-        'bert_F1'           : '',
-    })
-
-# ── BERTScore: fine-tuned vs baseline per prompt (no reference needed) ──
-print('\\nComputing BERTScore (fine-tuned vs baseline) ...')
-base_texts = [r['generated_scenario'] for r in baseline_rows]
-ft_texts   = [r['generated_scenario'] for r in ft_rows]
-if base_texts and ft_texts and len(base_texts) == len(ft_texts):
-    P, R, F1 = bert_score(ft_texts, base_texts, lang='en', verbose=False)
-    for i, (p, r, f) in enumerate(zip(P.tolist(), R.tolist(), F1.tolist())):
-        pid = ft_rows[i]['prompt_id']
-        for ev in eval_rows:
-            if ev['prompt_id'] == pid:
-                ev['bert_P']  = round(p, 4)
-                ev['bert_R']  = round(r, 4)
-                ev['bert_F1'] = round(f, 4)
-    print('BERTScore done.')
-else:
-    print('Skipping BERTScore (row count mismatch).')
-
-# ── Print summary table ──
-METRICS = ['sections_found','sections_in_order','mitre_recall','g_notation_ok',
-           'arrow_count','numbered_stages','markdown_hits','distinct_1',
-           'distinct_2','ttr','word_count','bert_F1']
-
-print()
-print(f'{"model":>12} {"prompt_id":>10}', end='')
-for m in METRICS:
-    print(f' {m:>18}', end='')
-print()
-for ev in eval_rows:
-    print(f'{ev["model"]:>12} {ev["prompt_id"]:>10}', end='')
-    for m in METRICS:
-        print(f' {str(ev.get(m,"")):>18}', end='')
-    print()
-
-# ── Aggregate averages ──
-def avg(lst): return round(sum(float(x) for x in lst if x != '') / len(lst), 4) if lst else 0
-
-print()
-for model_name in ('baseline', 'finetuned'):
-    subset = [e for e in eval_rows if e['model'] == model_name]
-    if not subset: continue
-    print(f'--- {model_name.upper()} AVERAGES ---')
-    for m in METRICS:
-        vals = [e[m] for e in subset if e.get(m) != '']
-        print(f'  {m:<22}: {avg(vals)}')
-    print()
-
-# ── Save eval CSV ──
-fields = ['model','prompt_id','focus'] + METRICS + ['bert_P','bert_R']
-with open(EVAL_CSV, 'w', newline='', encoding='utf-8') as f:
-    w = csv.DictWriter(f, fieldnames=fields, extrasaction='ignore')
-    w.writeheader()
-    for ev in eval_rows:
-        w.writerow({k: ev.get(k,'') for k in fields})
-
-print(f'Eval CSV saved: {EVAL_CSV}')
-print('Run Cell 7 to confirm all output files.')
-"""
-
-CELL6 = """# Cell 7 (final) — Confirm output files
-import os
-
-OUTPUT_DIR = '/kaggle/working'
-filenames  = [
-    'prompt_gen_comparison.csv',
-    'prompt_gen_comparison.txt',
-    'eval_results.csv',
-]
-
-print('Output files:')
-for fname in filenames:
-    fpath = os.path.join(OUTPUT_DIR, fname)
-    if os.path.exists(fpath):
-        sz = os.path.getsize(fpath)
-        print(f'  \u2714 {fpath}  ({sz:,} bytes)')
-    else:
-        print(f'  \u2718 {fpath}  NOT FOUND')
-
-print()
-print('Download them from the Output tab on the right panel of this Kaggle notebook.')
-"""
-
-# ── Notebook assembly ──────────────────────────────────────────────────────────
-
-def md_cell(source, cell_id):
-    return {"cell_type": "markdown", "id": cell_id, "metadata": {}, "source": source}
-
-def code_cell(source, cell_id):
-    return {"cell_type": "code", "execution_count": None, "id": cell_id,
+def code_cell(source, cid):
+    return {"cell_type": "code", "execution_count": None, "id": cid,
             "metadata": {}, "outputs": [], "source": source}
 
-notebook = {
-    "nbformat": 4,
-    "nbformat_minor": 5,
-    "metadata": {
-        "kaggle": {
-            "accelerator": "nvidiaTeslaT4",
-            "dataSources": [{"sourceType": "datasetVersion", "sourceId": "finetuned"}],
-            "isGpuEnabled": True,
-            "isInternetEnabled": True
-        },
-        "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-        "language_info": {"name": "python", "version": "3.10.12"},
-    },
-    "cells": [
-        md_cell(MD_INTRO,  "md-intro-001"),
-        code_cell(CELL1,   "code-gpu-002"),
-        code_cell(CELL2,   "code-install-003"),
-        code_cell(CELL3,   "code-files-004"),
-        code_cell(CELL4,   "code-config-005"),
-        code_cell(CELL5,   "code-gen-006"),
-        code_cell(CELL7,   "code-eval-007"),
-        code_cell(CELL6,   "code-dl-008"),
-    ],
+
+def ship_cell(files: dict, cid: str, note: str = ""):
+    """A code cell that writes the given {filename: source} files to the cwd."""
+    lines = ["# Ship the fixed repo modules into this runtime (source of truth)."]
+    if note:
+        lines.append(f"# {note}")
+    lines.append("import pathlib")
+    for name, src in files.items():
+        lines.append(
+            f"pathlib.Path({pyliteral(name)}).write_text({pyliteral(src)}, encoding='utf-8')"
+        )
+    lines.append("print('Wrote:', " + ", ".join(pyliteral(n) for n in files) + ")")
+    return code_cell("\n".join(lines), cid)
+
+
+def write_notebook(path: Path, cells: list, metadata: dict):
+    notebook = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "metadata": metadata,
+        "cells": cells,
+    }
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(notebook, f, indent=1, ensure_ascii=False)
+    print(f"Created: {path.name}  ({path.stat().st_size:,} bytes)")
+
+
+COLAB_META = {
+    "accelerator": "GPU",
+    "colab": {"provenance": []},
+    "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+    "language_info": {"name": "python"},
 }
 
-out = Path("kaggle_prompt_gen.ipynb")
-with out.open("w", encoding="utf-8") as f:
-    json.dump(notebook, f, indent=1, ensure_ascii=False)
+KAGGLE_META = {
+    "kaggle": {
+        "accelerator": "nvidiaTeslaT4",
+        "dataSources": [{"sourceType": "datasetVersion", "sourceId": "finetuned"}],
+        "isGpuEnabled": True,
+        "isInternetEnabled": True,
+    },
+    "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+    "language_info": {"name": "python"},
+}
 
-print(f"Created: {out.resolve()}")
-print("Upload kaggle_prompt_gen.ipynb to Kaggle and run the cells in order.")
-print("Make sure the 'finetuned' dataset is attached under Input before running.")
+REQUIREMENTS = read(FT / "requirements_finetune.txt")
+
+
+# ── 1) Training notebook (Colab) ───────────────────────────────────────────────
+
+def build_training_notebook():
+    files = {
+        "prompt_format.py": read(FT / "prompt_format.py"),
+        "data_split.py":    read(FT / "data_split.py"),
+        "finetuning.py":    read(FT / "finetuning.py"),
+        "fine_tune.py":     read(FT / "fine_tune.py"),
+        "requirements_finetune.txt": REQUIREMENTS,
+    }
+
+    md_intro = (
+        "# QLoRA Fine-Tuning (Colab)\n\n"
+        "Fine-tunes `mistralai/Mistral-7B-Instruct-v0.3` on the tri-modal scenario "
+        "dataset using the **fixed** pipeline (`fine_tune.py`). No training logic "
+        "lives in this notebook — it ships the repo modules and runs the script, so "
+        "the prompt/precision/masking fixes always apply.\n\n"
+        "Steps: GPU check -> install -> ship code -> upload `training_data.jsonl` -> "
+        "train -> download the adapter + `test_inputs.jsonl`.\n\n"
+        "**Precision is auto-selected:** bf16 on A100, fp16 on T4."
+    )
+
+    gpu_check = (
+        "import torch\n"
+        "print('CUDA available:', torch.cuda.is_available())\n"
+        "if torch.cuda.is_available():\n"
+        "    print('GPU:', torch.cuda.get_device_name(0))\n"
+        "    print('bf16 supported (A100=True, T4=False):', torch.cuda.is_bf16_supported())\n"
+        "else:\n"
+        "    print('No GPU. Runtime -> Change runtime type -> T4 GPU')"
+    )
+
+    install = (
+        "!pip install -q -r requirements_finetune.txt\n"
+        "print('Installed fine-tuning requirements.')"
+    )
+
+    upload = (
+        "from google.colab import files\n"
+        "print('Upload training_data.jsonl')\n"
+        "up = files.upload()\n"
+        "import os; print('cwd files:', os.listdir('.'))"
+    )
+
+    run_train = (
+        "# Runs the fixed QLoRA pipeline. finetuning.py auto-creates the held-out\n"
+        "# split at --test_inputs and trains on the complement only.\n"
+        "!python fine_tune.py --data training_data.jsonl --out ./output --test_inputs ./test_inputs.jsonl\n"
+        "# Override examples:\n"
+        "#   --target_modules attn   (attention-only LoRA)\n"
+        "#   --epochs 5 --lr 1e-4 --r 32 --alpha 64\n"
+        "#   --merge                 (also save a merged fp16 model; needs ~16GB)"
+    )
+
+    download = (
+        "import shutil\n"
+        "from google.colab import files\n"
+        "shutil.make_archive('finetuned_adapters', 'zip', './output')\n"
+        "files.download('finetuned_adapters.zip')\n"
+        "# Keep the SAME split for evaluation:\n"
+        "files.download('test_inputs.jsonl')"
+    )
+
+    cells = [
+        md_cell(md_intro, "md-intro"),
+        code_cell(gpu_check, "gpu-check"),
+        code_cell(install, "install"),
+        ship_cell(files, "ship-code", "These are the repaired pipeline files."),
+        code_cell(upload, "upload-data"),
+        code_cell(run_train, "run-train"),
+        code_cell(download, "download"),
+    ]
+    write_notebook(HERE / "colab_finetune_setup.ipynb", cells, COLAB_META)
+
+
+# ── 2) Inference test notebook (Colab) ─────────────────────────────────────────
+
+def build_inference_notebook():
+    files = {
+        "prompt_format.py": read(FT / "prompt_format.py"),
+        "data_split.py":    read(FT / "data_split.py"),
+        "run_inference.py": read(FT / "run_inference.py"),
+        "test_inputs.jsonl": read(TEST_INPUTS),
+        "requirements_finetune.txt": REQUIREMENTS,
+    }
+
+    md_intro = (
+        "# Inference Test — Fine-Tuned Scenario Generator (Colab)\n\n"
+        "Generates tri-modal scenarios for the **held-out** test inputs using "
+        "`run_inference.py`. All inference logic lives in that script and uses the "
+        "**same** `prompt_format.build_chat` as training, so the prompt cannot drift.\n\n"
+        "It sets eos/pad ids (the model stops) and decodes **only the new tokens** "
+        "(no echoed prompt). Upload your adapter folder into `./output` first."
+    )
+
+    install = "!pip install -q -r requirements_finetune.txt\nprint('Installed.')"
+
+    upload = (
+        "import os\n"
+        "from google.colab import files\n"
+        "os.makedirs('output', exist_ok=True)\n"
+        "print('Upload the adapter files (adapter_model.safetensors, adapter_config.json,\\n"
+        "tokenizer files, chat_template.jinja) — they will be moved into ./output')\n"
+        "up = files.upload()\n"
+        "for fn in up:\n"
+        "    os.replace(fn, os.path.join('output', fn))\n"
+        "print('output/:', os.listdir('output'))"
+    )
+
+    run_infer = (
+        "# Decodes only the new tokens; MAX_NEW_TOKENS=1280 (in the 1024-1536 range).\n"
+        "!python run_inference.py --adapter ./output --test_inputs ./test_inputs.jsonl --out ./inference_results.txt --samples 3\n"
+        "# Add --compare to also generate the base (no-adapter) output side by side."
+    )
+
+    show = (
+        "print(open('inference_results.txt', encoding='utf-8').read())"
+    )
+
+    cells = [
+        md_cell(md_intro, "md-intro"),
+        code_cell(install, "install"),
+        ship_cell(files, "ship-code", "run_inference.py + shared modules + held-out inputs."),
+        code_cell(upload, "upload-adapter"),
+        code_cell(run_infer, "run-infer"),
+        code_cell(show, "show-results"),
+    ]
+    write_notebook(HERE / "finetune_output_test.ipynb", cells, COLAB_META)
+
+
+# ── 3) Baseline vs fine-tuned comparison (Kaggle) ──────────────────────────────
+
+def build_comparison_notebook():
+    files = {
+        "prompt_format.py": read(FT / "prompt_format.py"),
+        "test_inputs.jsonl": read(TEST_INPUTS),
+    }
+
+    md_intro = (
+        "# Baseline vs Fine-Tuned — Scenario Generator (Kaggle)\n\n"
+        "Compares base `Mistral-7B-Instruct-v0.3` against the LoRA fine-tune on the "
+        "**real held-out** test inputs, using the **canonical** prompt "
+        "(`prompt_format.build_chat`, full instruction). Emits "
+        "`prompt_gen_comparison.{csv,txt}` (the .txt is parseable by "
+        "`manual_eval_metrics.py`) and a reference-free metrics table.\n\n"
+        "Attach the **finetuned** adapter dataset under *Input* before running."
+    )
+
+    gpu = (
+        "import torch, os\n"
+        "os.environ['PYTORCH_ALLOC_CONF'] = 'expandable_segments:True'\n"
+        "print('CUDA:', torch.cuda.is_available(),\n"
+        "      '| bf16:', torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False)"
+    )
+
+    install = "!pip install -q -U transformers peft bitsandbytes accelerate\nprint('Done.')"
+
+    discover = (
+        "import os\n"
+        "REQUIRED = ['adapter_config.json', 'adapter_model.safetensors']\n"
+        "def find_adapter_dir(base='/kaggle/input'):\n"
+        "    for root, _dirs, fs in os.walk(base):\n"
+        "        if all(r in fs for r in REQUIRED):\n"
+        "            return root\n"
+        "    return None\n"
+        "ADAPTER_DIR = find_adapter_dir()\n"
+        "print('Adapter dir:', ADAPTER_DIR)\n"
+        "assert ADAPTER_DIR, 'Attach the finetuned adapter dataset under Input.'"
+    )
+
+    config = (
+        "import gc, csv, json, time, torch\n"
+        "from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\n"
+        "from peft import PeftModel\n"
+        "import prompt_format  # shipped above — same builder as training\n"
+        "\n"
+        "BASE_MODEL = 'mistralai/Mistral-7B-Instruct-v0.3'\n"
+        "OUT = '/kaggle/working'\n"
+        "MAX_NEW_TOKENS = 1280\n"
+        "TXT = os.path.join(OUT, 'prompt_gen_comparison.txt')\n"
+        "CSV = os.path.join(OUT, 'prompt_gen_comparison.csv')\n"
+        "\n"
+        "RECORDS = [json.loads(l) for l in open('test_inputs.jsonl', encoding='utf-8') if l.strip()]\n"
+        "print(f'{len(RECORDS)} held-out records')\n"
+        "\n"
+        "import re\n"
+        "TECH_RE = re.compile(r'TECHNIQUES:\\s*(.+)')\n"
+        "def techniques_of(rec):\n"
+        "    m = TECH_RE.search(rec.get('input', ''))\n"
+        "    return m.group(1).strip() if m else ''\n"
+        "\n"
+        "def build_bnb():\n"
+        "    bf16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()\n"
+        "    return BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type='nf4',\n"
+        "        bnb_4bit_use_double_quant=True,\n"
+        "        bnb_4bit_compute_dtype=torch.bfloat16 if bf16 else torch.float16)\n"
+        "\n"
+        "def load_base():\n"
+        "    m = AutoModelForCausalLM.from_pretrained(BASE_MODEL, quantization_config=build_bnb(),\n"
+        "        device_map='auto')\n"
+        "    t = AutoTokenizer.from_pretrained(BASE_MODEL)\n"
+        "    if t.pad_token is None: t.pad_token = t.eos_token\n"
+        "    m.config.use_cache = True; m.eval()\n"
+        "    return m, t\n"
+        "\n"
+        "def gen(model, tok, rec):\n"
+        "    # Canonical prompt; decode only new tokens (no echoed prompt); stops on EOS.\n"
+        "    prompt = prompt_format.build_chat(rec, tok, for_training=False)\n"
+        "    inputs = tok(prompt, return_tensors='pt', add_special_tokens=False).to(model.device)\n"
+        "    n = inputs['input_ids'].shape[1]\n"
+        "    with torch.no_grad():\n"
+        "        out = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=True,\n"
+        "            temperature=0.7, top_p=0.9, repetition_penalty=1.1,\n"
+        "            eos_token_id=tok.eos_token_id, pad_token_id=tok.pad_token_id)\n"
+        "    return tok.decode(out[0][n:], skip_special_tokens=True).strip()\n"
+        "\n"
+        "def cleanup(*objs):\n"
+        "    for o in objs:\n"
+        "        del o\n"
+        "    gc.collect()\n"
+        "    if torch.cuda.is_available(): torch.cuda.empty_cache()\n"
+        "print('Config ready.')"
+    )
+
+    generate = (
+        "results = []\n"
+        "print('PHASE 1 - BASELINE'); model, tok = load_base()\n"
+        "for i, rec in enumerate(RECORDS, 1):\n"
+        "    print(f'  baseline {i}/{len(RECORDS)} {rec.get(\"source_id\")}')\n"
+        "    results.append({'model': 'baseline', 'prompt_id': f'P{i}',\n"
+        "        'source_id': rec.get('source_id', f'P{i}'),\n"
+        "        'techniques': techniques_of(rec), 'output': gen(model, tok, rec)})\n"
+        "cleanup(model)\n"
+        "\n"
+        "print('PHASE 2 - FINE-TUNED'); model, tok = load_base()\n"
+        "ft = PeftModel.from_pretrained(model, ADAPTER_DIR); ft.eval()\n"
+        "for i, rec in enumerate(RECORDS, 1):\n"
+        "    print(f'  finetuned {i}/{len(RECORDS)} {rec.get(\"source_id\")}')\n"
+        "    results.append({'model': 'finetuned', 'prompt_id': f'P{i}',\n"
+        "        'source_id': rec.get('source_id', f'P{i}'),\n"
+        "        'techniques': techniques_of(rec), 'output': gen(ft, tok, rec)})\n"
+        "cleanup(ft, model)\n"
+        "\n"
+        "# CSV\n"
+        "with open(CSV, 'w', newline='', encoding='utf-8') as f:\n"
+        "    w = csv.DictWriter(f, fieldnames=['model','prompt_id','source_id','techniques','output'])\n"
+        "    w.writeheader(); w.writerows(results)\n"
+        "\n"
+        "# TXT in the format manual_eval_metrics.py parses\n"
+        "base = {r['prompt_id']: r for r in results if r['model']=='baseline'}\n"
+        "ftr  = {r['prompt_id']: r for r in results if r['model']=='finetuned'}\n"
+        "SEP = '='*80; DIV = '-'*80\n"
+        "with open(TXT, 'w', encoding='utf-8') as f:\n"
+        "    f.write('BASELINE vs FINE-TUNED COMPARISON\\n' + SEP + '\\n\\n')\n"
+        "    for pid in [f'P{i}' for i in range(1, len(RECORDS)+1)]:\n"
+        "        r = ftr[pid]\n"
+        "        f.write(f'PROMPT {pid}: held-out {r[\"source_id\"]}\\n')\n"
+        "        f.write(f'Techniques: {r[\"techniques\"]}\\n\\n')\n"
+        "        f.write('BASELINE OUTPUT\\n' + DIV + '\\n' + base[pid]['output'] + '\\n\\n')\n"
+        "        f.write('FINE-TUNED OUTPUT\\n' + DIV + '\\n' + ftr[pid]['output'] + '\\n\\n')\n"
+        "        f.write(SEP + '\\n\\n')\n"
+        "print('Wrote', CSV, 'and', TXT)"
+    )
+
+    evaluate = (
+        "# Reference-free metrics (no LLM judge) on the generated comparison.\n"
+        "import re, csv\n"
+        "SECTIONS = ['[NATURAL LANGUAGE]','[MATHEMATICAL EXPRESSION]','[ATTACK GRAPH]']\n"
+        "MITRE = re.compile(r'T\\d{4}(?:\\.\\d{3})?'); G = re.compile(r'G\\s*=\\s*\\(\\s*N')\n"
+        "ARROW = re.compile(r'->'); STAGE = re.compile(r'^\\s*(?:Stage\\s*)?\\d+[.):\\s]', re.M)\n"
+        "MD = re.compile(r'(\\*\\*|^#{1,3} )', re.M)\n"
+        "rows = list(csv.DictReader(open(CSV, encoding='utf-8')))\n"
+        "def metrics(t, tech):\n"
+        "    found = [s for s in SECTIONS if s in t]\n"
+        "    ids = set(MITRE.findall(tech)); out = set(MITRE.findall(t))\n"
+        "    recall = round(len(ids & out)/len(ids), 3) if ids else 0.0\n"
+        "    return dict(sections=len(found), in_order=int(found==SECTIONS),\n"
+        "        mitre_recall=recall, g=int(bool(G.search(t))), arrows=len(ARROW.findall(t)),\n"
+        "        stages=len(STAGE.findall(t)), markdown=len(MD.findall(t)), words=len(t.split()))\n"
+        "agg = {}\n"
+        "for r in rows:\n"
+        "    m = metrics(r['output'], r['techniques']); agg.setdefault(r['model'], []).append(m)\n"
+        "print(f\"{'metric':<14}{'baseline':>12}{'finetuned':>12}\")\n"
+        "keys = ['sections','in_order','mitre_recall','g','arrows','stages','markdown','words']\n"
+        "for k in keys:\n"
+        "    b = agg.get('baseline', []); ft = agg.get('finetuned', [])\n"
+        "    bm = round(sum(x[k] for x in b)/len(b), 3) if b else '-'\n"
+        "    fm = round(sum(x[k] for x in ft)/len(ft), 3) if ft else '-'\n"
+        "    print(f'{k:<14}{str(bm):>12}{str(fm):>12}')\n"
+        "print('\\nFor the full report: python evaluation/manual_eval_metrics.py --txt prompt_gen_comparison.txt')"
+    )
+
+    confirm = (
+        "import os\n"
+        "for fn in ['prompt_gen_comparison.csv', 'prompt_gen_comparison.txt']:\n"
+        "    p = os.path.join('/kaggle/working', fn)\n"
+        "    print(('OK  ' if os.path.exists(p) else 'MISSING  ') + p,\n"
+        "          (f'({os.path.getsize(p):,} bytes)' if os.path.exists(p) else ''))"
+    )
+
+    cells = [
+        md_cell(md_intro, "md-intro"),
+        code_cell(gpu, "gpu"),
+        code_cell(install, "install"),
+        ship_cell(files, "ship-code", "prompt_format.py + real held-out test_inputs.jsonl."),
+        code_cell(discover, "discover-adapter"),
+        code_cell(config, "config"),
+        code_cell(generate, "generate"),
+        code_cell(evaluate, "evaluate"),
+        code_cell(confirm, "confirm"),
+    ]
+    write_notebook(HERE / "kaggle_prompt_gen.ipynb", cells, KAGGLE_META)
+
+
+def build_model_comparison_notebook(colab: bool):
+    """Same modules and run on both platforms; only setup and storage differ."""
+    files = {
+        "compare_models.py": read(EVAL / "compare_models.py"),
+        "prompt_generator.py": read(HERE / "prompt_generator.py"),
+        "prompt_format.py": read(FT / "prompt_format.py"),
+        "data_split.py": read(FT / "data_split.py"),
+        "judge_eval.py": read(EVAL / "judge_eval.py"),
+        "manual_eval_metrics.py": read(EVAL / "manual_eval_metrics.py"),
+        "attack_paths.json": read(EVAL / "inputs" / "attack_paths.json"),
+    }
+
+    if colab:
+        steps = (
+            "1. Runtime > Change runtime type: **T4 GPU**.\n"
+            "2. Secrets (key icon on the left): add `OPENROUTER_API_KEY` and allow notebook access. "
+            "Without it you get format metrics only.\n"
+            "3. Have the adapter zip ready (`finetuned_adapters.zip` from the training notebook). "
+            "The adapter cell asks for it.\n"
+            "4. Allow Google Drive when asked. Results are saved there, so a rerun after a "
+            "disconnect skips everything already done."
+        )
+        storage = (
+            "from google.colab import drive\n"
+            "drive.mount('/content/drive')\n"
+            "OUT_DIR = '/content/drive/MyDrive/model_comparison'\n"
+            "print('Results go to', OUT_DIR)"
+        )
+        discover = (
+            "import os, zipfile\n"
+            "REQUIRED = ['adapter_config.json', 'adapter_model.safetensors']\n"
+            "def find_adapter_dir(base='/content'):\n"
+            "    for root, dirs, fs in os.walk(base):\n"
+            "        dirs[:] = [d for d in dirs if d != 'drive']\n"
+            "        if all(r in fs for r in REQUIRED):\n"
+            "            return root\n"
+            "    return None\n"
+            "ADAPTER_DIR = find_adapter_dir()\n"
+            "if ADAPTER_DIR is None:\n"
+            "    from google.colab import files\n"
+            "    print('Upload the adapter zip (finetuned_adapters.zip).')\n"
+            "    for name in files.upload():\n"
+            "        if name.endswith('.zip'):\n"
+            "            zipfile.ZipFile(name).extractall('/content/adapter')\n"
+            "    ADAPTER_DIR = find_adapter_dir()\n"
+            "print('Adapter dir:', ADAPTER_DIR)\n"
+            "assert ADAPTER_DIR, 'No adapter_config.json + adapter_model.safetensors in the upload.'"
+        )
+        secret = (
+            "try:\n"
+            "    from google.colab import userdata\n"
+            "    os.environ['OPENROUTER_API_KEY'] = userdata.get('OPENROUTER_API_KEY')\n"
+            "    print('Judge key loaded.')\n"
+            "except Exception as e:\n"
+            "    print('No OPENROUTER_API_KEY secret, so only format metrics will be reported:', e)"
+        )
+    else:
+        steps = (
+            "1. Settings: accelerator **GPU T4 x2**, internet **on**.\n"
+            "2. Input: attach the **finetuned** adapter dataset.\n"
+            "3. Add-ons > Secrets: add `OPENROUTER_API_KEY`. Without it you get format metrics only.\n"
+            "4. Rerunning after a disconnect skips everything already in `/kaggle/working/model_comparison`."
+        )
+        storage = "OUT_DIR = '/kaggle/working/model_comparison'"
+        discover = (
+            "import os\n"
+            "REQUIRED = ['adapter_config.json', 'adapter_model.safetensors']\n"
+            "def find_adapter_dir(base='/kaggle/input'):\n"
+            "    for root, _dirs, fs in os.walk(base):\n"
+            "        if all(r in fs for r in REQUIRED):\n"
+            "            return root\n"
+            "    return None\n"
+            "ADAPTER_DIR = find_adapter_dir()\n"
+            "print('Adapter dir:', ADAPTER_DIR)\n"
+            "assert ADAPTER_DIR, 'Attach the finetuned adapter dataset under Input.'"
+        )
+        secret = (
+            "try:\n"
+            "    from kaggle_secrets import UserSecretsClient\n"
+            "    os.environ['OPENROUTER_API_KEY'] = UserSecretsClient().get_secret('OPENROUTER_API_KEY')\n"
+            "    print('Judge key loaded.')\n"
+            "except Exception as e:\n"
+            "    print('No OPENROUTER_API_KEY secret, so only format metrics will be reported:', e)"
+        )
+
+    md_intro = (
+        f"# Fine-tuned Mistral vs RedSage Qwen ({'Colab' if colab else 'Kaggle'})\n\n"
+        "Runs both models on the same attack paths with the same prompt, then scores "
+        "them with the format metrics and the gemini-2.5-flash-lite judge. "
+        "Generated by `create_notebook.py` from `evaluation/compare_models.py`.\n\n"
+        "Before *Run all*:\n"
+        f"{steps}\n\n"
+        "About 10 generations at 2 to 3 minutes each, plus about 30 GB of model downloads."
+    )
+
+    install = (
+        '!pip install -q -U "transformers>=5,<6" "peft>=0.18,<0.19" '
+        '"bitsandbytes>=0.47,<0.50" "accelerate>=1.1"\n'
+        "print('Done.')"
+    )
+
+    run = (
+        '!python compare_models.py --adapter_path "{ADAPTER_DIR}" '
+        '--attack_paths attack_paths.json --out_dir "{OUT_DIR}"'
+    )
+
+    show = (
+        "from IPython.display import Markdown, display\n"
+        "display(Markdown(open(os.path.join(OUT_DIR, 'report.md'), encoding='utf-8').read()))"
+    )
+
+    cells = [
+        md_cell(md_intro, "intro"),
+        code_cell(install, "install"),
+        ship_cell(files, "ship-modules"),
+        code_cell(storage, "storage"),
+        code_cell(discover, "discover-adapter"),
+        code_cell(secret, "judge-key"),
+        code_cell(run, "run"),
+        code_cell(show, "report"),
+    ]
+    name = "colab_compare_models.ipynb" if colab else "kaggle_compare_models.ipynb"
+    write_notebook(HERE / name, cells, COLAB_META if colab else KAGGLE_META)
+
+
+def main():
+    if not TEST_INPUTS.exists():
+        print("[i] test_inputs.jsonl missing — creating the deterministic split first.")
+        data_split.ensure_test_inputs(DATASET, TEST_INPUTS)
+    build_training_notebook()
+    build_inference_notebook()
+    build_comparison_notebook()
+    build_model_comparison_notebook(colab=False)
+    build_model_comparison_notebook(colab=True)
+    print("\nAll notebooks regenerated from the .py sources.")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,14 @@
+# Evaluation — LLM-judge dependencies
+# Install with: pip install -r evaluation/requirements_eval.txt
+#
+# Only judge_eval.py needs these: the Gemini client used as the automated judge,
+# plus dotenv so the API key can live in scenario_generation/.env instead of the
+# shell history. Same two packages (and versions) as the dataset pipeline, which
+# already talks to the same API.
+#
+# The local generation half of judge_eval.py / evaluate.py needs the fine-tuning
+# stack: pip install -r fine_tuning/requirements_finetune.txt
+# manual_eval_metrics.py needs neither — it is stdlib-only.
+
+google-genai>=1.0.0
+python-dotenv>=1.0.0

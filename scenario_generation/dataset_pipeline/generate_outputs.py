@@ -17,6 +17,10 @@ Usage:
         --limit  80
 """
 
+# call_gemini's `-> str | None` is a PEP-604 union, which needs Python 3.10+ at
+# runtime; this import makes annotations lazy so the module also imports on 3.9.
+from __future__ import annotations
+
 import argparse
 import json
 import os

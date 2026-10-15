@@ -28,6 +28,7 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+.pytest_cache/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/

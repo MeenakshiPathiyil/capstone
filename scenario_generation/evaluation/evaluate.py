@@ -1,4 +1,22 @@
-"""Generate base vs fine-tuned scenarios for manual evaluation."""
+"""
+evaluate.py
+-----------
+Generate base vs fine-tuned scenarios for manual evaluation.
+
+HEAVY IMPORTS ARE LAZY, like every other script here (the convention is stated in
+fine_tuning/finetuning.py). torch / transformers / peft are imported inside the
+functions that use them, so this module imports — and ``--help`` works — on the
+capstone laptop, which is Python 3.9.6 with no ML stack. It used to import all
+three at module scope, which meant the README's claim that "nothing under
+evaluation/ or fine_tuning/ needs the ML stack merely to import" was false of this
+one file, and tests/test_python39_compat.py did not cover it.
+
+``from __future__ import annotations`` is what makes the lazy imports safe: the
+return annotation on build_bnb_config() names a transformers class, and an
+annotation is evaluated at definition time unless it is a string.
+"""
+
+from __future__ import annotations
 
 import argparse
 import json
@@ -7,11 +25,12 @@ import sys
 import gc
 from pathlib import Path
 
-import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+# Shared canonical prompt builder (same one used for training) — keeps the eval
+# prompt byte-identical to training so we measure the model, not prompt drift.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fine_tuning"))
+import prompt_format  # noqa: E402
 
-MAX_NEW_TOKENS = 1200
+MAX_NEW_TOKENS = 1280
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +44,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_bnb_config() -> BitsAndBytesConfig:
+    import torch
+    from transformers import BitsAndBytesConfig
+
     return BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -49,12 +71,17 @@ def load_test_inputs(path: Path) -> list[dict]:
     return entries
 
 
-def format_prompt(instruction: str, input_text: str) -> str:
-    return f"[INST] {instruction}\n\n{input_text} [/INST]"
+def generate_text(model, tokenizer, record: dict) -> str:
+    # Canonical prompt (full instruction); build_chat already embeds BOS, so
+    # tokenize with add_special_tokens=False. Decode ONLY the new tokens so the
+    # saved output is the completion, never the echoed prompt.
+    prompt = prompt_format.build_chat(record, tokenizer, for_training=False)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
+                       max_length=2048, add_special_tokens=False).to(model.device)
+    n = inputs["input_ids"].shape[1]
 
+    import torch
 
-def generate_text(model, tokenizer, prompt: str) -> str:
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(model.device)
     with torch.no_grad():
         output_ids = model.generate(
             **inputs,
@@ -67,10 +94,7 @@ def generate_text(model, tokenizer, prompt: str) -> str:
             pad_token_id=tokenizer.pad_token_id,
         )
 
-    decoded = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    if decoded.startswith(prompt):
-        return decoded[len(prompt):].strip()
-    return decoded.strip()
+    return tokenizer.decode(output_ids[0][n:], skip_special_tokens=True).strip()
 
 
 def load_cache(cache_path: Path) -> dict:
@@ -128,6 +152,9 @@ def cleanup_memory(model=None, tokenizer=None):
         del tokenizer
         
     gc.collect()
+
+    import torch
+
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     print("[✓] Memory cleared.\n")
@@ -135,7 +162,13 @@ def cleanup_memory(model=None, tokenizer=None):
 
 def main() -> None:
     args = parse_args()
-    
+
+    # The model loaders, imported here rather than at module scope: everything
+    # above this line — argument parsing, --help, the JSONL reader, the worksheet
+    # writer — runs with no ML stack installed.
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
     test_inputs_path = Path(args.test_inputs)
     adapter_path = Path(args.adapter_path)
     out_json_path = Path(args.out_json)
@@ -175,9 +208,7 @@ def main() -> None:
                 continue
                 
             print(f"[+] ({idx}/{len(base_needs_gen)}) Generating BASE output for {source_id}")
-            prompt = format_prompt(entry.get("instruction", ""), entry.get("input", ""))
-            
-            output_text = generate_text(base_model, tokenizer, prompt)
+            output_text = generate_text(base_model, tokenizer, entry)
             
             if source_id not in cache:
                 cache[source_id] = {}
@@ -219,9 +250,7 @@ def main() -> None:
                 continue
                 
             print(f"[+] ({idx}/{len(tuned_needs_gen)}) Generating TUNED output for {source_id}")
-            prompt = format_prompt(entry.get("instruction", ""), entry.get("input", ""))
-            
-            output_text = generate_text(finetuned_model, tokenizer, prompt)
+            output_text = generate_text(finetuned_model, tokenizer, entry)
             
             if source_id not in cache:
                 cache[source_id] = {}

@@ -1,111 +1,79 @@
-"""Create an unseen 10-entry test set from training_inputs.jsonl."""
+"""
+Create the held-out, unseen test set used for evaluation.
+
+This writes evaluation/test_inputs.jsonl — the SINGLE split artifact shared by
+finetuning.py (which trains on the complement) and evaluate.py (which scores the
+held-out set). The split is deterministic (seeded) and keyed on each record's
+stable _meta.source_id, so "unseen" is guaranteed unseen.
+
+Previously this script read a non-existent dataset/inputs/training_inputs.jsonl
+and keyed on a top-level source_id the dataset didn't have. It now reads the real
+dataset and uses the shared fine_tuning/data_split module.
+
+Usage (run from scenario_generation/):
+    python evaluation/make_test_inputs.py
+    python evaluation/make_test_inputs.py --data dataset/training_data.jsonl \
+        --out evaluation/test_inputs.jsonl --test_size 10 --seed 42
+"""
 
 import argparse
-import json
-import random
 import sys
 from pathlib import Path
 
+# Import the shared split module from fine_tuning/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fine_tuning"))
+import data_split  # noqa: E402
+
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Sample unseen test inputs for evaluation")
-    parser.add_argument(
-        "--inputs",
-        default="dataset/inputs/training_inputs.jsonl",
-        help="Path to training_inputs.jsonl",
-    )
-    parser.add_argument(
-        "--out",
-        default="evaluation/test_inputs.jsonl",
-        help="Output path for sampled test set",
-    )
-    parser.add_argument(
-        "--train_count",
-        type=int,
-        default=80,
-        help="Number of initial entries used in training (default: 80)",
-    )
-    parser.add_argument(
-        "--sample_size",
-        type=int,
-        default=10,
-        help="Number of unseen entries to sample (default: 10)",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed for reproducible sampling",
-    )
+    parser = argparse.ArgumentParser(description="Create the deterministic held-out test set")
+    parser.add_argument("--data", default="dataset/training_data.jsonl",
+                        help="Path to the full dataset JSONL")
+    parser.add_argument("--out", default=data_split.DEFAULT_TEST_INPUTS,
+                        help="Output path for the held-out test set")
+    parser.add_argument("--test_size", type=int, default=10,
+                        help="Number of unseen entries to hold out (default: 10)")
+    parser.add_argument("--val_frac", type=float, default=0.15,
+                        help="Validation fraction of the train pool (for reporting)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducible splitting")
+    parser.add_argument("--force", action="store_true",
+                        help="Overwrite an existing test_inputs.jsonl")
     return parser.parse_args()
-
-
-def read_jsonl(path: Path) -> list[dict]:
-    items = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            items.append(json.loads(line))
-    return items
-
-
-def write_jsonl(path: Path, items: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        for item in items:
-            f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
     args = parse_args()
 
-    try:
-        inputs_path = Path(args.inputs)
-        out_path = Path(args.out)
+    data_path = Path(args.data)
+    out_path = Path(args.out)
 
-        if not inputs_path.exists():
-            print(f"[!] Input file not found: {inputs_path}")
-            sys.exit(1)
-
-        print(f"[+] Reading inputs from: {inputs_path}")
-        all_entries = read_jsonl(inputs_path)
-        print(f"[+] Total entries loaded: {len(all_entries)}")
-
-        if args.train_count >= len(all_entries):
-            print(
-                "[!] train_count is too large. "
-                f"Got train_count={args.train_count}, total={len(all_entries)}"
-            )
-            sys.exit(1)
-
-        unseen_entries = all_entries[args.train_count :]
-        if len(unseen_entries) < args.sample_size:
-            print(
-                "[!] Not enough unseen entries to sample. "
-                f"Requested {args.sample_size}, available {len(unseen_entries)}"
-            )
-            sys.exit(1)
-
-        random.seed(args.seed)
-        sampled = random.sample(unseen_entries, args.sample_size)
-
-        write_jsonl(out_path, sampled)
-        print(f"[✓] Saved {len(sampled)} unseen entries to: {out_path}")
-
-        source_ids = [item.get("source_id", "unknown") for item in sampled]
-        print(f"[+] Sampled source_ids: {', '.join(source_ids)}")
-
-    except KeyboardInterrupt:
-        print("\n[!] Sampling interrupted by user")
-        sys.exit(130)
-    except json.JSONDecodeError as e:
-        print(f"[!] Invalid JSON in input file: {e}")
+    if not data_path.exists():
+        print(f"[!] Dataset not found: {data_path}")
         sys.exit(1)
-    except Exception as e:
-        print(f"[!] Failed to create test inputs: {e}")
-        sys.exit(1)
+
+    if out_path.exists() and not args.force:
+        existing = data_split.read_test_inputs(out_path)
+        print(f"[i] {out_path} already exists with {len(existing)} entries "
+              "(use --force to regenerate).")
+        sys.exit(0)
+
+    records = data_split.load_records(data_path)
+    print(f"[+] Loaded {len(records)} records from {data_path}")
+
+    split = data_split.compute_split(
+        records, test_size=args.test_size, val_frac=args.val_frac, seed=args.seed)
+    data_split.write_test_inputs(out_path, split["test"])
+
+    # Safety: the held-out set must not overlap the train/val pool.
+    test_ids = data_split.ids_of(split["test"])
+    pool_ids = data_split.ids_of(split["train"]) | data_split.ids_of(split["val"])
+    assert test_ids.isdisjoint(pool_ids), "Held-out test set overlaps the train pool!"
+
+    print(f"[✓] Wrote {len(split['test'])} unseen entries to: {out_path}")
+    print(f"    Train {len(split['train'])} / Val {len(split['val'])} / "
+          f"Test {len(split['test'])} (seed={args.seed})")
+    print(f"    Held-out source_ids: {', '.join(r['source_id'] for r in split['test'])}")
 
 
 if __name__ == "__main__":
