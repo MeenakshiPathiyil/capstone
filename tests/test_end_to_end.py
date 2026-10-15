@@ -274,6 +274,27 @@ def test_the_default_artifacts_land_in_output(tmp_path):
     ) == len(GRAPH_FILES) + 4
 
 
+GOLDEN_DIR = Path(__file__).resolve().parent
+
+
+def test_the_artifacts_without_their_own_golden_test_match_their_golden_files(tmp_path):
+    """The attack graph and the per-step export, byte for byte. The export and
+    the state graph blocks are pinned in test_exporter.py and test_state_graph.py;
+    output/ itself is not tracked, so these goldens are what review sees."""
+
+    keywords = artifacts_in(tmp_path)
+    graph_runner.run_pipeline(**keywords)
+
+    produced = dict(keywords["attack_graph_files"])
+    produced["steps"] = keywords["steps_path"]
+
+    for name, path in produced.items():
+        golden = GOLDEN_DIR / ("golden_" + path.name)
+        assert path.read_text(encoding="utf-8") == golden.read_text(encoding="utf-8"), (
+            "%s changed: read the diff, then copy it over %s" % (path.name, golden.name)
+        )
+
+
 def test_two_runs_produce_the_same_bytes(tmp_path):
     """Determinism, end to end, for every artifact the runner writes. The ranking"""
 
