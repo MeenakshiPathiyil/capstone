@@ -19,8 +19,8 @@ from .conftest import (
 
 PROMPT_MARKERS = ("[INST]", "[/INST]")
 
-# The signature of the canonical builder's own source. A literal holding the
-CANONICAL_SOURCE_MARKER = "def build_chat("
+# A string holding this is a notebook shipping prompt_format.py, not a template.
+CANONICAL_SOURCE_MARKER = "def build_prompt("
 
 
 def _repository_module_sources():
@@ -138,7 +138,7 @@ def test_module_does_not_hand_roll_an_inst_prompt(path):
     offenders = _marker_literals(path)
     assert not offenders, (
         f"{path.name} builds an [INST] string itself instead of calling "
-        f"prompt_format.build_chat: {offenders}")
+        f"prompt_format.build_prompt: {offenders}")
 
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.name)
@@ -150,7 +150,7 @@ def test_notebook_does_not_hand_roll_an_inst_prompt(path):
     )
     assert not offenders, (
         f"{path.name} builds an [INST] string itself instead of calling "
-        f"prompt_format.build_chat: {offenders}")
+        f"prompt_format.build_prompt: {offenders}")
 
 
 def _shipped_files(path):
@@ -232,15 +232,15 @@ def test_the_scan_would_catch_the_historical_drift():
 
     # a docstring that merely explains the format is not a violation
     assert _marker_literals_in_source(
-        '"""The prompt is <s>[INST] instruction\\n\\ninput[/INST]."""\n'
+        '"""The prompt is <s>[INST] instruction\\n\\ninput [/INST]\\n."""\n'
     ) == []
 
 
 def test_judge_eval_calls_the_canonical_builder():
     source = (EVALUATION_DIR / "judge_eval.py").read_text(encoding="utf-8")
-    assert "prompt_format.build_chat" in source
+    assert "prompt_format.build_prompt" in source
 
 
 def test_prompt_generator_calls_the_canonical_builder():
     source = PROMPT_GENERATOR_MODULE.read_text(encoding="utf-8")
-    assert "prompt_format.build_chat" in source
+    assert "prompt_format.build_prompt" in source

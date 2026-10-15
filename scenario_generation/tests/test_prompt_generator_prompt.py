@@ -22,71 +22,34 @@ def prompt_entry():
     return prompt_generator.STRUCTURED_PROMPTS[0]
 
 
-def canonical(prompt_entry, attack_path, tokenizer):
-    """The prompt build_chat produces for this (prompt, path) pair."""
-    record = {
+def canonical(prompt_entry, attack_path):
+    """The trained-format prompt for this (prompt, path) pair."""
+    return prompt_format.build_prompt({
         "instruction": prompt_generator.SYSTEM_INSTRUCTION,
         "input": prompt_generator.build_input_block(prompt_entry, attack_path),
-    }
-    return prompt_format.build_chat(record, tokenizer, for_training=False)
+    })
 
 
-# ── Byte-for-byte parity with the canonical builder ───────────────────────────
-
-def test_prompt_is_byte_identical_to_build_chat_without_tokenizer(prompt_entry, attack_path):
-    assert (prompt_generator.format_model_input(prompt_entry, attack_path, None)
-            == canonical(prompt_entry, attack_path, None))
-
-
-def test_prompt_is_byte_identical_to_build_chat_with_tokenizer(
-        prompt_entry, attack_path, fake_tokenizer):
-    assert (prompt_generator.format_model_input(prompt_entry, attack_path, fake_tokenizer)
-            == canonical(prompt_entry, attack_path, fake_tokenizer))
-
-
-# ── The specific drift this file was written to catch ──────────────────────────
-
-def test_prompt_has_no_space_before_the_response_marker(
-        prompt_entry, attack_path, fake_tokenizer):
-    for tokenizer in (None, fake_tokenizer):
-        prompt = prompt_generator.format_model_input(prompt_entry, attack_path, tokenizer)
-        assert prompt.endswith(prompt_format.RESPONSE_MARKER)
-        assert not prompt.endswith(" " + prompt_format.RESPONSE_MARKER)
+def test_the_generated_prompt_is_the_trained_prompt(prompt_entry, attack_path):
+    assert (prompt_generator.format_model_input(prompt_entry, attack_path)
+            == canonical(prompt_entry, attack_path))
 
 
 def test_prompt_generator_defines_no_local_prompt_builder():
     """Guard against the local template coming back on a future merge."""
     assert not hasattr(prompt_generator, "format_prompt")
-    assert "prompt_format.build_chat" in PROMPT_GENERATOR_MODULE.read_text(
+    assert "prompt_format.build_prompt" in PROMPT_GENERATOR_MODULE.read_text(
         encoding="utf-8")
 
 
-# ── Train / inference parity of the generated prompt ──────────────────────────
-
-def test_generated_prompt_is_a_prefix_of_the_training_text(
-        prompt_entry, attack_path, fake_tokenizer):
-    """The generation prompt must be a strict prefix of the full training text —"""
-    for tokenizer in (None, fake_tokenizer):
-        record = {
-            "instruction": prompt_generator.SYSTEM_INSTRUCTION,
-            "input": prompt_generator.build_input_block(prompt_entry, attack_path),
-            "output": "[NATURAL LANGUAGE]\nsomething",
-        }
-        prompt = prompt_generator.format_model_input(prompt_entry, attack_path, tokenizer)
-        training_text = prompt_format.build_chat(record, tokenizer, for_training=True)
-
-        assert training_text.startswith(prompt)
-        assert len(training_text) > len(prompt)
-
-
-def test_tokenizer_call_does_not_add_a_second_bos():
-    """The other half of prompt fidelity: build_chat already emits ``<s>``, so this"""
+def test_tokenizer_calls_do_not_add_a_second_bos():
+    """The prompt already starts with <s>, so tokenizer(...) must not add another."""
     for path in (PROMPT_GENERATOR_MODULE, EVALUATION_DIR / "evaluate.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         calls = [node for node in ast.walk(tree)
                  if isinstance(node, ast.Call)
                  and isinstance(node.func, ast.Name) and node.func.id == "tokenizer"]
-        assert calls, f"{path.name}: no tokenizer(...) call found — did generate_text move?"
+        assert calls, f"{path.name}: no tokenizer(...) call found; did generate_text move?"
         for call in calls:
             flags = {kw.arg: kw.value for kw in call.keywords}
             assert "add_special_tokens" in flags, f"{path.name}:{call.lineno}"
@@ -95,10 +58,10 @@ def test_tokenizer_call_does_not_add_a_second_bos():
 
 
 def test_full_instruction_and_the_path_facts_are_in_the_prompt(prompt_entry, attack_path):
-    """The whole instruction (all the formatting rules) plus the record's input —"""
-    prompt = prompt_generator.format_model_input(prompt_entry, attack_path, None)
+    """The whole instruction (all the formatting rules) plus every path fact."""
+    prompt = prompt_generator.format_model_input(prompt_entry, attack_path)
 
-    assert prompt_generator.SYSTEM_INSTRUCTION.rstrip() in prompt
+    assert prompt_generator.SYSTEM_INSTRUCTION in prompt
 
     for line in ("SOURCE:", "INDUSTRY:", "ATTACK LEVEL:", "TECHNIQUES:", "SURFACES:"):
         assert line in prompt
@@ -191,7 +154,7 @@ def test_the_real_export_loads(attack_path_records):
 def test_one_prompt_per_exported_path(prompt_entry, attack_path_records):
     """The loop is over the real paths now, so N paths produce N distinct prompts —"""
     prompts = [
-        prompt_generator.format_model_input(prompt_entry, record, None)
+        prompt_generator.format_model_input(prompt_entry, record)
         for record in prompt_generator.load_attack_paths(ATTACK_PATHS_FIXTURE)
     ]
 
@@ -206,8 +169,8 @@ def test_every_prompt_in_the_cross_product_is_canonical(attack_path_records):
     """Every prompt the script can emit — each library prompt against each exported"""
     for record in attack_path_records:
         for entry in prompt_generator.STRUCTURED_PROMPTS:
-            assert (prompt_generator.format_model_input(entry, record, None)
-                    == canonical(entry, record, None))
+            assert (prompt_generator.format_model_input(entry, record)
+                    == canonical(entry, record))
 
 
 def test_a_missing_file_is_a_clear_error(tmp_path):

@@ -19,17 +19,12 @@ Generates (next to this script):
 """
 
 import json
-import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent          # scenario_generation/
 FT = HERE / "fine_tuning"
 EVAL = HERE / "evaluation"
-DATASET = HERE / "dataset" / "training_data.jsonl"
 TEST_INPUTS = EVAL / "test_inputs.jsonl"
-
-sys.path.insert(0, str(FT))
-import data_split  # noqa: E402
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -121,7 +116,7 @@ def build_training_notebook():
         "lives in this notebook — it ships the repo modules and runs the script, so "
         "the prompt/precision/masking fixes always apply.\n\n"
         "Steps: GPU check -> install -> ship code -> upload `training_data.jsonl` -> "
-        "train -> download the adapter + `test_inputs.jsonl`.\n\n"
+        "train -> download the adapter.\n\n"
         "**Precision is auto-selected:** bf16 on A100, fp16 on T4."
     )
 
@@ -148,9 +143,9 @@ def build_training_notebook():
     )
 
     run_train = (
-        "# Runs the fixed QLoRA pipeline. finetuning.py auto-creates the held-out\n"
-        "# split at --test_inputs and trains on the complement only.\n"
-        "!python fine_tune.py --data training_data.jsonl --out ./output --test_inputs ./test_inputs.jsonl\n"
+        "# Runs the fixed QLoRA pipeline. The 17 held-out records listed in\n"
+        "# data_split.py are never trained on, so evaluation stays honest.\n"
+        "!python fine_tune.py --data training_data.jsonl --out ./output\n"
         "# Override examples:\n"
         "#   --target_modules attn   (attention-only LoRA)\n"
         "#   --epochs 5 --lr 1e-4 --r 32 --alpha 64\n"
@@ -161,9 +156,7 @@ def build_training_notebook():
         "import shutil\n"
         "from google.colab import files\n"
         "shutil.make_archive('finetuned_adapters', 'zip', './output')\n"
-        "files.download('finetuned_adapters.zip')\n"
-        "# Keep the SAME split for evaluation:\n"
-        "files.download('test_inputs.jsonl')"
+        "files.download('finetuned_adapters.zip')"
     )
 
     cells = [
@@ -193,7 +186,7 @@ def build_inference_notebook():
         "# Inference Test — Fine-Tuned Scenario Generator (Colab)\n\n"
         "Generates tri-modal scenarios for the **held-out** test inputs using "
         "`run_inference.py`. All inference logic lives in that script and uses the "
-        "**same** `prompt_format.build_chat` as training, so the prompt cannot drift.\n\n"
+        "**same** `prompt_format.build_prompt` as training, so the prompt cannot drift.\n\n"
         "It sets eos/pad ids (the model stops) and decodes **only the new tokens** "
         "(no echoed prompt). Upload your adapter folder into `./output` first."
     )
@@ -245,7 +238,7 @@ def build_comparison_notebook():
         "# Baseline vs Fine-Tuned — Scenario Generator (Kaggle)\n\n"
         "Compares base `Mistral-7B-Instruct-v0.3` against the LoRA fine-tune on the "
         "**real held-out** test inputs, using the **canonical** prompt "
-        "(`prompt_format.build_chat`, full instruction). Emits "
+        "(`prompt_format.build_prompt`, the format the adapter was trained on). Emits "
         "`prompt_gen_comparison.{csv,txt}` (the .txt is parseable by "
         "`manual_eval_metrics.py`) and a reference-free metrics table.\n\n"
         "Attach the **finetuned** adapter dataset under *Input* before running."
@@ -309,8 +302,8 @@ def build_comparison_notebook():
         "    return m, t\n"
         "\n"
         "def gen(model, tok, rec):\n"
-        "    # Canonical prompt; decode only new tokens (no echoed prompt); stops on EOS.\n"
-        "    prompt = prompt_format.build_chat(rec, tok, for_training=False)\n"
+        "    # The trained prompt; decode only new tokens (no echoed prompt); stops on EOS.\n"
+        "    prompt = prompt_format.build_prompt(rec)\n"
         "    inputs = tok(prompt, return_tensors='pt', add_special_tokens=False).to(model.device)\n"
         "    n = inputs['input_ids'].shape[1]\n"
         "    with torch.no_grad():\n"
@@ -433,7 +426,7 @@ def build_model_comparison_notebook(colab: bool):
         steps = (
             "1. Runtime > Change runtime type: **T4 GPU**.\n"
             "2. Secrets (key icon on the left): add `OPENROUTER_API_KEY` and allow notebook access. "
-            "Without it you get format metrics only.\n"
+            "Without it the run stops; add `--no_judge` to the run cell for format metrics only.\n"
             "3. Have the adapter zip ready (`finetuned_adapters.zip` from the training notebook). "
             "The adapter cell asks for it.\n"
             "4. Allow Google Drive when asked. Results are saved there, so a rerun after a "
@@ -471,13 +464,14 @@ def build_model_comparison_notebook(colab: bool):
             "    os.environ['OPENROUTER_API_KEY'] = userdata.get('OPENROUTER_API_KEY')\n"
             "    print('Judge key loaded.')\n"
             "except Exception as e:\n"
-            "    print('No OPENROUTER_API_KEY secret, so only format metrics will be reported:', e)"
+            "    print('No OPENROUTER_API_KEY secret, so the run will stop before loading a model:', e)"
         )
     else:
         steps = (
             "1. Settings: accelerator **GPU T4 x2**, internet **on**.\n"
             "2. Input: attach the **finetuned** adapter dataset.\n"
-            "3. Add-ons > Secrets: add `OPENROUTER_API_KEY`. Without it you get format metrics only.\n"
+            "3. Add-ons > Secrets: add `OPENROUTER_API_KEY`. Without it the run stops; add "
+            "`--no_judge` to the run cell for format metrics only.\n"
             "4. Rerunning after a disconnect skips everything already in `/kaggle/working/model_comparison`."
         )
         storage = "OUT_DIR = '/kaggle/working/model_comparison'"
@@ -499,7 +493,7 @@ def build_model_comparison_notebook(colab: bool):
             "    os.environ['OPENROUTER_API_KEY'] = UserSecretsClient().get_secret('OPENROUTER_API_KEY')\n"
             "    print('Judge key loaded.')\n"
             "except Exception as e:\n"
-            "    print('No OPENROUTER_API_KEY secret, so only format metrics will be reported:', e)"
+            "    print('No OPENROUTER_API_KEY secret, so the run will stop before loading a model:', e)"
         )
 
     md_intro = (
@@ -543,9 +537,6 @@ def build_model_comparison_notebook(colab: bool):
 
 
 def main():
-    if not TEST_INPUTS.exists():
-        print("[i] test_inputs.jsonl missing — creating the deterministic split first.")
-        data_split.ensure_test_inputs(DATASET, TEST_INPUTS)
     build_training_notebook()
     build_inference_notebook()
     build_comparison_notebook()

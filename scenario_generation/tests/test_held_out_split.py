@@ -1,95 +1,71 @@
-"""test_held_out_split.py"""
+"""The test set is the records the shipped adapter never trained on."""
 
+import importlib.util
 import json
 
 import pytest
 
 import data_split
-import judge_eval
 
-from .conftest import DATASET, DATASET_MISSING_REASON
-
-
-pytestmark = pytest.mark.skipif(not DATASET.exists(), reason=DATASET_MISSING_REASON)
+from .conftest import DATASET, EVALUATION_DIR
 
 
-# ── The split itself ──────────────────────────────────────────────────────────
+TEST_INPUTS = EVALUATION_DIR / "test_inputs.jsonl"
 
-def test_seeded_split_is_disjoint():
+
+@pytest.fixture
+def split():
+    return data_split.split(data_split.load_records(DATASET))
+
+
+def ids(records):
+    return {r["source_id"] for r in records}
+
+
+def test_the_split_partitions_the_dataset(split):
+    assert (len(split["train"]), len(split["val"]), len(split["test"])) == (54, 10, 17)
+    assert ids(split["test"]) == set(data_split.HELD_OUT_SOURCE_IDS)
+    assert ids(split["train"]).isdisjoint(ids(split["val"]))
+    assert ids(split["test"]).isdisjoint(ids(split["train"]) | ids(split["val"]))
+
+
+def test_the_split_is_deterministic(split):
+    again = data_split.split(data_split.load_records(DATASET))
+    assert [r["source_id"] for r in again["val"]] == [r["source_id"] for r in split["val"]]
+
+
+@pytest.mark.skipif(importlib.util.find_spec("datasets") is None,
+                    reason="needs the `datasets` package")
+def test_the_held_out_ids_are_the_original_notebooks_split():
+    """Recomputed the way the original Colab notebook split the data before
+    training the shipped adapter."""
+    from datasets import Dataset
+
     records = data_split.load_records(DATASET)
-    split = data_split.compute_split(records, test_size=10, val_frac=0.15, seed=42)
+    kept = [r for r in records if r.get("output") and r.get("input")]
+    held_out = Dataset.from_list([{"i": i} for i in range(len(kept))]).train_test_split(
+        test_size=0.2, seed=42)["test"]["i"]
 
-    test_ids = data_split.ids_of(split["test"])
-    pool_ids = data_split.ids_of(split["train"]) | data_split.ids_of(split["val"])
-
-    assert len(split["test"]) == 10
-    assert test_ids
-    assert test_ids.isdisjoint(pool_ids)
-    assert len(test_ids) + len(pool_ids) == len(records)
+    assert {data_split.source_id(kept[i]) for i in held_out} == set(data_split.HELD_OUT_SOURCE_IDS)
 
 
-def test_split_is_deterministic():
-    """Same seed, same held-out records — the evaluator depends on this."""
-    records = data_split.load_records(DATASET)
-    first = data_split.compute_split(records, test_size=10, seed=42)
-    second = data_split.compute_split(records, test_size=10, seed=42)
-    assert ([r["source_id"] for r in first["test"]]
-            == [r["source_id"] for r in second["test"]])
+def test_the_committed_test_inputs_are_the_held_out_records(split, tmp_path):
+    expected = tmp_path / "test_inputs.jsonl"
+    data_split.write_test_inputs(expected, split["test"])
+
+    assert TEST_INPUTS.read_text(encoding="utf-8") == expected.read_text(encoding="utf-8")
 
 
-# ── What judge_eval actually judges ───────────────────────────────────────────
+def test_a_test_file_with_a_trained_on_record_is_refused(split, tmp_path):
+    """The 10-record file evaluation used before was all training data."""
+    stale = tmp_path / "test_inputs.jsonl"
+    data_split.write_test_inputs(stale, split["test"][:3] + split["train"][:1])
 
-def test_resolved_records_are_the_seeded_held_out_split(tmp_path):
-    artifact = tmp_path / "test_inputs.jsonl"
-    entries = judge_eval.resolve_test_records(DATASET, artifact, test_size=10, seed=42)
-
-    expected = data_split.compute_split(
-        data_split.load_records(DATASET), test_size=10, val_frac=0.15, seed=42)
-    assert ([r["source_id"] for r in entries]
-            == [r["source_id"] for r in expected["test"]])
+    with pytest.raises(ValueError, match=split["train"][0]["source_id"]):
+        data_split.read_test_inputs(stale)
 
 
-def test_resolved_records_are_disjoint_from_the_training_split(tmp_path):
-    artifact = tmp_path / "test_inputs.jsonl"
-    entries = judge_eval.resolve_test_records(DATASET, artifact, test_size=10, seed=42)
-
-    split = data_split.compute_split(
-        data_split.load_records(DATASET), test_size=10, val_frac=0.15, seed=42)
-    trained_on = {r["source_id"] for r in split["train"]} | {r["source_id"] for r in split["val"]}
-
-    judged = {r["source_id"] for r in entries}
-    assert judged
-    assert judged.isdisjoint(trained_on)
-
-
-def test_resolution_writes_the_shared_artifact(tmp_path):
-    """The same file fine_tune.py excludes — one artifact, not two opinions."""
-    artifact = tmp_path / "test_inputs.jsonl"
-    entries = judge_eval.resolve_test_records(DATASET, artifact, test_size=10, seed=42)
-
-    assert artifact.exists()
-    persisted = [json.loads(line) for line in artifact.read_text().splitlines() if line.strip()]
-    assert [r["source_id"] for r in persisted] == [r["source_id"] for r in entries]
-
-
-def test_every_judged_record_has_what_the_prompt_needs(tmp_path):
-    entries = judge_eval.resolve_test_records(
-        DATASET, tmp_path / "test_inputs.jsonl", test_size=10, seed=42)
-    for idx, entry in enumerate(entries, start=1):
-        assert entry.get("instruction"), entry
-        assert entry.get("input"), entry
-        assert judge_eval.record_source_id(entry, idx) != f"entry_{idx:02d}"
-
-
-def test_falls_back_to_the_persisted_artifact_when_the_dataset_is_absent(tmp_path):
-    """training_data.jsonl is gitignored, so a Colab session may only carry"""
-    artifact = tmp_path / "test_inputs.jsonl"
-    expected = judge_eval.resolve_test_records(DATASET, artifact, test_size=10, seed=42)
-
-    entries = judge_eval.resolve_test_records(tmp_path / "no_dataset.jsonl", artifact)
-    assert [r["source_id"] for r in entries] == [r["source_id"] for r in expected]
-
-
-def test_missing_dataset_and_missing_artifact_is_an_error(tmp_path):
-    with pytest.raises(FileNotFoundError):
-        judge_eval.resolve_test_records(tmp_path / "nope.jsonl", tmp_path / "nope.jsonl")
+def test_every_held_out_record_has_what_the_prompt_needs():
+    for record in data_split.read_test_inputs(TEST_INPUTS):
+        assert record["instruction"] and record["input"] and record["output"], record["source_id"]
+        assert json.dumps(record)

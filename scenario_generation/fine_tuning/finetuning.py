@@ -21,7 +21,7 @@ Usage (run from scenario_generation/):
         --out   fine_tuning/output/
 
 Offline probes (no GPU / no ML stack required):
-    python fine_tuning/fine_tune.py --check_data        # data + prompt parity
+    python fine_tuning/fine_tune.py --check_data        # split + token lengths
     python fine_tuning/fine_tune.py --smoke --out /tmp/s # 3-step CUDA-guarded run
 
 Requirements:
@@ -31,8 +31,8 @@ Notes on portability:
   * The heavy ML imports (torch, transformers, trl, peft, datasets) are done
     LAZILY inside the functions that need them, so --help, --check_data and the
     GPU-less --smoke path work on a machine with no ML stack installed.
-  * TRL/transformers APIs differ across versions; we DETECT the available
-    field/argument names at runtime and branch, rather than hardcoding.
+  * Written against the versions pinned in requirements_finetune.txt (TRL 0.29,
+    transformers 5), the stack that trained the shipped adapter.
 """
 
 import argparse
@@ -54,8 +54,6 @@ MAX_SEQ_LEN  = 2048   # max token length per training example (see fix C)
 # LoRA target-module presets.
 ALL_LINEAR = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
 ATTN_ONLY  = ["q_proj", "k_proj", "v_proj", "o_proj"]
-
-DEFAULT_TEST_INPUTS = "evaluation/test_inputs.jsonl"
 
 # The three section headers the model must emit, in order (used by the self-test).
 REQUIRED_HEADERS = ["[NATURAL LANGUAGE]", "[MATHEMATICAL EXPRESSION]", "[ATTACK GRAPH]"]
@@ -85,41 +83,40 @@ def check_imports():
         sys.exit(1)
 
 
-def estimate_tokens(text: str) -> int:
-    """Rough token-count estimate (~4 chars/token) used only when no tokenizer."""
-    return max(1, round(len(text) / 4))
+# ── Dataset (shared split + the prompt the adapter was trained on) ────────────
 
+def tokenize_example(tokenizer, record: dict) -> dict:
+    """input_ids for prompt + answer, and a completion_mask that is 1 on the answer.
 
-# ── Dataset loading (shared split + canonical prompt) ─────────────────────────
-
-def load_dataset_split(data_path, tokenizer, test_inputs_path, test_size, val_frac, seed):
+    Tokenized here rather than by TRL so the ids are exactly the ones inference
+    sees: prompt_format embeds the <s>, so no special tokens are added, and the
+    loss only falls on the answer.
     """
-    Build the train/validation HuggingFace Datasets.
+    prompt = prompt_format.build_prompt(record)
+    prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
+    input_ids = tokenizer(prompt + prompt_format.build_completion(record),
+                          add_special_tokens=False)["input_ids"]
+    if input_ids[:len(prompt_ids)] != prompt_ids:
+        raise ValueError(f"{record['_meta']['source_id']}: the prompt does not tokenize "
+                         "as a prefix of the full example")
+    return {
+        "input_ids": input_ids,
+        "completion_mask": [0] * len(prompt_ids) + [1] * (len(input_ids) - len(prompt_ids)),
+    }
 
-    The held-out TEST set is excluded entirely (it lives in test_inputs.jsonl and
-    is used only by evaluation) — we train on its complement. Each example's
-    'text' field is the canonical full training text from prompt_format.build_chat
-    (instruction + input + output, EOS-terminated), identical to what inference
-    will prefix-match.
+
+def load_dataset_split(data_path, tokenizer, val_frac, seed):
+    """Tokenized train and validation Datasets, plus the split they came from.
+
+    The held-out test records are never trained on; see data_split.py.
     """
     from datasets import Dataset
 
-    split = data_split.ensure_test_inputs(
-        data_path, test_inputs_path,
-        test_size=test_size, val_frac=val_frac, seed=seed,
-    )
-
-    def to_ds(recs):
-        rows = [{"text": prompt_format.build_chat(r, tokenizer, for_training=True)}
-                for r in recs]
-        return Dataset.from_list(rows)
-
-    train_ds = to_ds(split["train"])
-    val_ds = to_ds(split["val"])
-    print(f"[+] Split (seed={seed}, test held out in {test_inputs_path}):")
-    print(f"    Train : {len(train_ds)} examples")
-    print(f"    Val   : {len(val_ds)} examples")
-    print(f"    Test  : {len(split['test'])} examples (held out, not trained on)")
+    split = data_split.split(data_split.load_records(data_path), val_frac=val_frac, seed=seed)
+    train_ds = Dataset.from_list([tokenize_example(tokenizer, r) for r in split["train"]])
+    val_ds = Dataset.from_list([tokenize_example(tokenizer, r) for r in split["val"]])
+    print(f"[+] Split: train {len(train_ds)} / val {len(val_ds)} / "
+          f"test {len(split['test'])} (held out, never trained on)")
     return train_ds, val_ds, split
 
 
@@ -218,182 +215,64 @@ def attach_lora(model, r, alpha, dropout, target_modules):
     return model
 
 
-# ── SFTConfig builder (branches on the installed TRL/transformers API) ─────────
-
-def _sftconfig_fields():
-    from trl import SFTConfig
-    from dataclasses import fields as dc_fields
-    try:
-        return {f.name for f in dc_fields(SFTConfig)}
-    except TypeError:
-        # Not a dataclass on this version — fall back to signature inspection.
-        import inspect
-        return set(inspect.signature(SFTConfig.__init__).parameters)
-
+# ── SFTConfig (TRL 0.29, as pinned in requirements_finetune.txt) ─────────────
 
 def build_sft_config(output_dir, args, bf16, eval_mode="epoch", max_steps=None):
-    """
-    Build an SFTConfig, choosing field names that exist in the installed TRL:
-      * sequence length: `max_length` (TRL >=0.20) else `max_seq_length`
-      * eval cadence   : `eval_strategy` (newer) else `evaluation_strategy`
-      * `dataset_kwargs={'add_special_tokens': False}` when supported, since
-        build_chat already embeds BOS/EOS (avoids double special tokens).
-
-    eval_mode: "epoch" (full run), "steps" (smoke), or "no" (no eval).
-    """
+    """The training config. eval_mode: "epoch" (full run), "steps" (smoke) or "no"."""
     from trl import SFTConfig
-
-    valid = _sftconfig_fields()
 
     kwargs = dict(
         output_dir=output_dir,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
-        optim="paged_adamw_8bit",                       # fix G1
+        optim="paged_adamw_8bit",
         learning_rate=args.lr,
         lr_scheduler_type="cosine",
         warmup_steps=5,
-        bf16=bf16,                                      # fix D1 (matched precision)
+        bf16=bf16,
         fp16=not bf16,
         logging_steps=2 if max_steps else 10,
         save_total_limit=2,
         report_to="none",
-        dataset_text_field="text",
+        max_length=args.max_seq_len,
+        completion_only_loss=True,
         packing=False,
         max_grad_norm=0.3,
-        gradient_checkpointing=True,                    # fix D4
-        seed=args.seed,                                 # fix G3
+        gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},
+        seed=args.seed,
+        data_seed=args.seed,
     )
-    if "data_seed" in valid:
-        kwargs["data_seed"] = args.seed                 # fix G3
     if max_steps is not None:
         kwargs["max_steps"] = max_steps
     else:
         kwargs["num_train_epochs"] = args.epochs
 
-    # Sequence length field name branch (fix C).
-    if "max_length" in valid:
-        kwargs["max_length"] = args.max_seq_len
-    elif "max_seq_length" in valid:
-        kwargs["max_seq_length"] = args.max_seq_len
-    else:
-        print("[!] SFTConfig exposes neither max_length nor max_seq_length; "
-              "examples may be truncated at the library default.")
-
-    # Avoid double BOS/EOS: build_chat already adds them, so tell the SFT
-    # tokenization not to re-add special tokens (when the option exists).
-    if "dataset_kwargs" in valid:
-        kwargs["dataset_kwargs"] = {"add_special_tokens": False}
-
-    if "gradient_checkpointing_kwargs" in valid:
-        kwargs["gradient_checkpointing_kwargs"] = {"use_reentrant": False}
-
-    # Eval / checkpoint / best-model selection (fix F).
-    eval_key = "eval_strategy" if "eval_strategy" in valid else "evaluation_strategy"
     if eval_mode == "no":
-        kwargs[eval_key] = "no"
-        kwargs["save_strategy"] = "no"
-    elif eval_mode == "steps":
-        kwargs[eval_key] = "steps"
-        kwargs["eval_steps"] = 2
-        kwargs["save_strategy"] = "steps"
-        kwargs["save_steps"] = 2
-    else:  # "epoch"
-        kwargs[eval_key] = "epoch"
-        kwargs["save_strategy"] = "epoch"
-
-    if eval_mode != "no":
-        kwargs["per_device_eval_batch_size"] = 1
-        kwargs["load_best_model_at_end"] = True
-        kwargs["metric_for_best_model"] = "eval_loss"
-        kwargs["greater_is_better"] = False
-
-    # Drop anything the installed version doesn't accept, but warn so nothing is
-    # silently lost.
-    dropped = [k for k in kwargs if k not in valid]
-    for k in dropped:
-        kwargs.pop(k)
-    if dropped:
-        print(f"[i] SFTConfig: ignored unsupported args on this version: {dropped}")
+        kwargs.update(eval_strategy="no", save_strategy="no")
+    else:
+        if eval_mode == "steps":
+            kwargs.update(eval_strategy="steps", eval_steps=2, save_strategy="steps", save_steps=2)
+        else:
+            kwargs.update(eval_strategy="epoch", save_strategy="epoch")
+        kwargs.update(per_device_eval_batch_size=1, load_best_model_at_end=True,
+                      metric_for_best_model="eval_loss", greater_is_better=False)
 
     return SFTConfig(**kwargs)
 
 
-# ── Completion-only collator (fix E1: in-context response-template ids) ────────
+# ── Trainer ───────────────────────────────────────────────────────────────────
 
-def build_collator(tokenizer, sample_text):
-    """
-    Build a DataCollatorForCompletionOnlyLM so loss is computed only on the
-    completion (everything after [/INST]), not on the prompt.
-
-    CRITICAL: we pass the [/INST] token ids computed IN CONTEXT (see
-    prompt_format.response_template_ids), not the raw string, because "[/INST]"
-    can tokenize differently mid-sequence and otherwise the collator silently
-    masks the whole example.
-
-    Returns None (with a warning) if the collator isn't importable, so training
-    still runs (as plain LM loss) rather than crashing.
-    """
-    try:
-        try:
-            from trl import DataCollatorForCompletionOnlyLM
-        except ImportError:
-            from trl.trainer import DataCollatorForCompletionOnlyLM
-    except Exception as e:
-        print(f"[!] DataCollatorForCompletionOnlyLM unavailable ({e}); "
-              "falling back to plain LM loss (prompt NOT masked).")
-        return None
-
-    response_ids = prompt_format.response_template_ids(tokenizer, sample_text)
-    print(f"[+] Completion-only masking on response-template ids {response_ids} "
-          f"(in-context for '{prompt_format.RESPONSE_MARKER}')")
-    return DataCollatorForCompletionOnlyLM(response_template=response_ids, tokenizer=tokenizer)
-
-
-def check_label_masking(tokenizer, collator, text):
-    """
-    Verify the collator masks the prompt (-100) and keeps real ids on the
-    completion (fix E acceptance). Returns (ok: bool, detail: str).
-    """
-    enc = tokenizer(text, add_special_tokens=False)
-    batch = collator([{"input_ids": enc["input_ids"]}])
-    labels = batch["labels"][0].tolist()
-
-    real = [i for i, l in enumerate(labels) if l != -100]
-    if not real:
-        return False, "ALL tokens masked — collator failed to find the response template."
-    first_real = real[0]
-    prefix_all_masked = all(l == -100 for l in labels[:first_real])
-    n_real = len(real)
-    detail = (f"first unmasked token at index {first_real}/{len(labels)}; "
-              f"{n_real} completion tokens carry loss; prompt fully masked={prefix_all_masked}")
-    return (prefix_all_masked and n_real > 0), detail
-
-
-# ── Trainer build (branches on processing_class vs tokenizer) ──────────────────
-
-def build_trainer(model, tokenizer, sft_config, train_ds, eval_ds, collator):
+def build_trainer(model, tokenizer, sft_config, train_ds, eval_ds):
     from trl import SFTTrainer
     from transformers import EarlyStoppingCallback
 
-    callbacks = []
+    kwargs = dict(model=model, args=sft_config, train_dataset=train_ds,
+                  processing_class=tokenizer)
     if eval_ds is not None:
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=2))  # fix F2
-
-    common = dict(model=model, args=sft_config, train_dataset=train_ds)
-    if eval_ds is not None:
-        common["eval_dataset"] = eval_ds
-    if collator is not None:
-        common["data_collator"] = collator
-    if callbacks:
-        common["callbacks"] = callbacks
-
-    # TRL renamed the tokenizer argument across versions: newer uses
-    # processing_class, older uses tokenizer. Prefer the new name.
-    try:
-        return SFTTrainer(processing_class=tokenizer, **common)
-    except TypeError:
-        return SFTTrainer(tokenizer=tokenizer, **common)
+        kwargs["eval_dataset"] = eval_ds
+        kwargs["callbacks"] = [EarlyStoppingCallback(early_stopping_patience=2)]
+    return SFTTrainer(**kwargs)
 
 
 # ── Post-training self-test (fix P3) ──────────────────────────────────────────
@@ -410,7 +289,7 @@ def post_training_selftest(model, tokenizer, test_rec, max_new_tokens):
         model.gradient_checkpointing_disable()
     model.eval()
 
-    prompt = prompt_format.build_chat(test_rec, tokenizer, for_training=False)
+    prompt = prompt_format.build_prompt(test_rec)
     inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
     with torch.no_grad():
@@ -468,165 +347,104 @@ def merge_adapter(base_model, adapter_dir, out_dir, trust_remote_code):
 
 # ── Training orchestration ────────────────────────────────────────────────────
 
+def masked_prompt_tokens(example) -> int:
+    """How many leading tokens of a tokenized example carry no loss."""
+    return example["completion_mask"].index(1)
+
+
 def train(args):
-    """Run the supervised fine-tuning loop using SFTTrainer (completion-only)."""
+    """Run the supervised fine-tuning loop, with loss on the answer only."""
     check_imports()
     from transformers import set_seed
-    set_seed(args.seed)                                # fix G3
+    set_seed(args.seed)
 
     model, tokenizer, bf16 = load_model_and_tokenizer(args.base, args.trust_remote_code)
     model = attach_lora(model, args.r, args.alpha, args.lora_dropout, args.target_modules)
 
-    train_ds, val_ds, split = load_dataset_split(
-        args.data, tokenizer, args.test_inputs,
-        args.test_size, args.val_frac, args.seed,
-    )
-    eval_enabled = len(val_ds) >= 1
-    if not eval_enabled:
-        print("[!] Validation split is empty — eval/early-stopping disabled.")
-    if len(train_ds) + len(val_ds) < 100:
-        print("[i] Note: this is a small dataset; eval_loss will be noisy.")
+    train_ds, val_ds, split = load_dataset_split(args.data, tokenizer, args.val_frac, args.seed)
+    too_long = [len(ids) for ids in train_ds["input_ids"] + val_ds["input_ids"]
+                if len(ids) > args.max_seq_len]
+    if too_long:
+        print(f"[!] {len(too_long)} examples exceed max_length={args.max_seq_len} "
+              f"(longest {max(too_long)}). Truncating them would cut off the end of the "
+              "answer and its </s>; raise --max_seq_len.")
+        sys.exit(1)
 
-    # True optimizer-step count (fix J3).
     eff_batch = args.batch_size * args.grad_accum
     steps_per_epoch = math.ceil(len(train_ds) / eff_batch)
-    total_steps = steps_per_epoch * args.epochs
     print()
     print("[+] Starting training…")
     print(f"    Output dir       : {args.out}")
     print(f"    Epochs           : {args.epochs}")
     print(f"    Effective batch  : {eff_batch} (bs {args.batch_size} x accum {args.grad_accum})")
-    print(f"    Optimizer steps  : ~{total_steps} ({steps_per_epoch}/epoch x {args.epochs})")
+    print(f"    Optimizer steps  : ~{steps_per_epoch * args.epochs} "
+          f"({steps_per_epoch}/epoch x {args.epochs})")
+    print(f"    Prompt tokens without loss (first example): {masked_prompt_tokens(train_ds[0])}")
     print()
 
-    sft_config = build_sft_config(args.out, args, bf16,
-                                  eval_mode="epoch" if eval_enabled else "no")
-
-    sample_text = train_ds[0]["text"]
-    collator = build_collator(tokenizer, sample_text)
-    if collator is not None:
-        ok, detail = check_label_masking(tokenizer, collator, sample_text)
-        print(f"[{'+' if ok else '!'}] label-masking check: {detail}")
-        if not ok:
-            print("[!] Completion-only masking looks wrong — aborting before wasting a GPU run.")
-            sys.exit(1)
-
-    trainer = build_trainer(model, tokenizer, sft_config, train_ds,
-                            val_ds if eval_enabled else None, collator)
-
+    trainer = build_trainer(model, tokenizer, build_sft_config(args.out, args, bf16),
+                            train_ds, val_ds)
     trainer.train()
-
-    if eval_enabled:
-        best = getattr(trainer.state, "best_model_checkpoint", None)
-        best_metric = getattr(trainer.state, "best_metric", None)
-        print(f"[+] Best checkpoint: {best}  (eval_loss={best_metric})")
+    print(f"[+] Best checkpoint: {trainer.state.best_model_checkpoint}  "
+          f"(eval_loss={trainer.state.best_metric})")
 
     print("[+] Saving final adapter weights…")
     trainer.save_model(args.out)
     tokenizer.save_pretrained(args.out)
     print(f"[✓] Model saved to: {args.out}")
 
-    ok = True
-    if split["test"]:
-        ok = post_training_selftest(model, tokenizer, split["test"][0], args.max_new_tokens)
+    ok = post_training_selftest(model, tokenizer, split["test"][0], args.max_new_tokens)
 
     if args.merge:
         merge_adapter(args.base, args.out, args.out, args.trust_remote_code)
 
     print()
-    print("Next step: run evaluation/evaluate.py to score the fine-tuned model")
+    print("Next step: run evaluation/judge_eval.py to score the fine-tuned model")
     if not ok:
         sys.exit(1)
 
 
-# ── --check_data probe (fix P1; deps-free) ────────────────────────────────────
+# ── --check_data probe (no model load) ────────────────────────────────────────
 
 def run_check_data(args) -> int:
     print("=" * 60)
-    print("  --check_data : data + prompt-parity probe (no model load)")
+    print("  --check_data : data, split and token-length probe (no model load)")
     print("=" * 60)
 
     if not Path(args.data).exists():
         print(f"[!] Dataset not found: {args.data}")
         return 1
 
-    records = data_split.load_records(args.data)
-    print(f"[+] Loaded {len(records)} records from {args.data}")
+    split = data_split.split(data_split.load_records(args.data),
+                             val_frac=args.val_frac, seed=args.seed)
+    print(f"[+] Split: train {len(split['train'])} / val {len(split['val'])} / "
+          f"test {len(split['test'])}")
 
-    # Try a real tokenizer; fall back to a labelled chars/4 estimate.
-    tokenizer = None
     try:
         from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.base, trust_remote_code=args.trust_remote_code)
-        print(f"[+] Using REAL tokenizer: {args.base}")
+        tokenizer = AutoTokenizer.from_pretrained(args.base, trust_remote_code=args.trust_remote_code)
     except Exception as e:
-        print(f"[i] Real tokenizer unavailable ({type(e).__name__}); "
-              "using chars/4 ESTIMATE for token counts.")
+        print(f"[i] Tokenizer unavailable ({type(e).__name__}); token checks skipped.")
+        print("\n[✓] check_data: split OK")
+        return 0
 
-    # 1) Train/inference parity (fix A acceptance).
-    prompt_format.assert_parity(records, tokenizer)
-    print("[+] PARITY OK: inference prompt is a strict prefix of training text "
-          "for all records (single shared build_chat).")
+    examples = [tokenize_example(tokenizer, r) for r in split["train"] + split["val"]]
+    lengths = sorted(len(e["input_ids"]) for e in examples)
+    print(f"[+] Training example length in tokens: min={lengths[0]} "
+          f"median={lengths[len(lengths) // 2]} max={lengths[-1]}")
+    print(f"[+] Prompt tokens without loss (first example): {masked_prompt_tokens(examples[0])}")
 
-    # 2) Token-length stats + truncation flag (fix C acceptance).
-    if tokenizer is not None:
-        lengths = [len(tokenizer(prompt_format.build_chat(r, tokenizer, True),
-                                 add_special_tokens=False)["input_ids"]) for r in records]
-        label = "real tokenizer"
-    else:
-        lengths = [estimate_tokens(prompt_format.build_chat(r, None, True)) for r in records]
-        label = "chars/4 ESTIMATE"
-    s = sorted(lengths)
-    p = lambda q: s[min(len(s) - 1, int(len(s) * q))]
-    print(f"[+] Full training-text token length ({label}): "
-          f"min={s[0]} p50={p(0.5)} p90={p(0.9)} max={s[-1]}")
-    over = sum(1 for L in lengths if L > args.max_seq_len)
-    print(f"[+] Configured max_length = {args.max_seq_len}; "
-          f"examples that would be truncated: {over}/{len(lengths)}")
-
-    # 3) Completion-only masking check (needs trl + real tokenizer).
-    if tokenizer is not None:
-        sample_text = prompt_format.build_chat(records[0], tokenizer, True)
-        collator = build_collator(tokenizer, sample_text)
-        if collator is not None:
-            all_ok = True
-            for r in records[:2]:
-                t = prompt_format.build_chat(r, tokenizer, True)
-                ok, detail = check_label_masking(tokenizer, collator, t)
-                print(f"    [{'+' if ok else '!'}] masking: {detail}")
-                all_ok = all_ok and ok
-            if not all_ok:
-                print("[!] label-masking check FAILED.")
-                return 1
-        else:
-            print("[i] masking check skipped (collator unavailable).")
-    else:
-        print("[i] masking check skipped (no transformers/trl installed).")
-
-    # 4) Split / unseen-test intersection (fix H acceptance).
-    split = data_split.ensure_test_inputs(
-        args.data, args.test_inputs, args.test_size, args.val_frac, args.seed)
-    train_ids = data_split.ids_of(split["train"]) | data_split.ids_of(split["val"])
-    test_ids = data_split.ids_of(split["test"])
-    disjoint = train_ids.isdisjoint(test_ids)
-    print(f"[+] Split: train {len(split['train'])} / val {len(split['val'])} / "
-          f"test {len(split['test'])} (artifact: {args.test_inputs})")
-    print(f"[{'+' if disjoint else '!'}] train ∩ test ids empty: {disjoint}")
-    if not disjoint:
-        return 1
-
-    # Final gate: truncation must be zero at the configured length.
-    if over > 0:
+    over = sum(1 for n in lengths if n > args.max_seq_len)
+    if over:
         print(f"[!] {over} example(s) exceed max_length={args.max_seq_len}. "
-              "Raise --max_seq_len or shorten the data before training.")
+              "Raise --max_seq_len before training.")
         return 1
 
     print("\n[✓] check_data: ALL CHECKS PASSED")
     return 0
 
 
-# ── --smoke probe (fix P2; CUDA-guarded) ──────────────────────────────────────
+# ── --smoke probe (CUDA-guarded) ──────────────────────────────────────────────
 
 def run_smoke(args) -> int:
     print("=" * 60)
@@ -635,12 +453,9 @@ def run_smoke(args) -> int:
     try:
         import torch
     except ImportError:
-        print("[smoke] PyTorch is not installed here — smoke is a NO-OP.")
-        print("        On Colab with a GPU this runs max_steps=3 training + one")
-        print("        generation to exercise the whole path fast.")
-        return 0
-    if not torch.cuda.is_available():
-        print("[smoke] No CUDA GPU detected — smoke is a NO-OP.")
+        torch = None
+    if torch is None or not torch.cuda.is_available():
+        print("[smoke] No CUDA GPU here, so smoke is a NO-OP.")
         print("        On Colab with a GPU this runs max_steps=3 training + one")
         print("        generation to exercise the whole path fast.")
         return 0
@@ -651,26 +466,16 @@ def run_smoke(args) -> int:
 
     model, tokenizer, bf16 = load_model_and_tokenizer(args.base, args.trust_remote_code)
     model = attach_lora(model, args.r, args.alpha, args.lora_dropout, args.target_modules)
-    train_ds, val_ds, split = load_dataset_split(
-        args.data, tokenizer, args.test_inputs,
-        args.test_size, args.val_frac, args.seed)
+    train_ds, val_ds, split = load_dataset_split(args.data, tokenizer, args.val_frac, args.seed)
 
     sft_config = build_sft_config(args.out, args, bf16, eval_mode="steps", max_steps=3)
-    sample_text = train_ds[0]["text"]
-    collator = build_collator(tokenizer, sample_text)
-    if collator is not None:
-        ok, detail = check_label_masking(tokenizer, collator, sample_text)
-        print(f"[{'+' if ok else '!'}] label-masking check: {detail}")
-
-    trainer = build_trainer(model, tokenizer, sft_config, train_ds, val_ds, collator)
+    trainer = build_trainer(model, tokenizer, sft_config, train_ds, val_ds)
     trainer.train()
-    best = getattr(trainer.state, "best_model_checkpoint", None)
-    best_metric = getattr(trainer.state, "best_metric", None)
-    print(f"[smoke] best checkpoint: {best} (eval_loss={best_metric})")
+    print(f"[smoke] best checkpoint: {trainer.state.best_model_checkpoint} "
+          f"(eval_loss={trainer.state.best_metric})")
 
-    if split["test"]:
-        post_training_selftest(model, tokenizer, split["test"][0],
-                               max_new_tokens=min(args.max_new_tokens, 256))
+    post_training_selftest(model, tokenizer, split["test"][0],
+                           max_new_tokens=min(args.max_new_tokens, 256))
     print("[✓] smoke complete")
     return 0
 
@@ -708,10 +513,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--grad_accum", type=int, default=4)
 
-    # Split / reproducibility.
-    parser.add_argument("--test_inputs", default=DEFAULT_TEST_INPUTS,
-                        help="Held-out test artifact (shared with evaluation)")
-    parser.add_argument("--test_size", type=int, default=10, help="Held-out test count")
+    # Split / reproducibility. The test set is fixed; see data_split.py.
     parser.add_argument("--val_frac", type=float, default=0.15,
                         help="Validation fraction of the train pool")
     parser.add_argument("--seed", type=int, default=42)

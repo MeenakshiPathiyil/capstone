@@ -15,7 +15,7 @@ FINE_TUNING_DIR = REPO_ROOT / "fine_tuning"
 DATASET_PIPELINE_DIR = REPO_ROOT / "dataset_pipeline"
 CANONICAL_PROMPT_MODULE = FINE_TUNING_DIR / "prompt_format.py"
 
-# The inference entry point that consumes the infrastructure repo's export. It
+# The inference entry point that consumes the graph pipeline's attack paths.
 PROMPT_GENERATOR_MODULE = REPO_ROOT / "prompt_generator.py"
 
 
@@ -38,7 +38,8 @@ def notebooks():
 
 
 def scanned_python_files():
-    """Every .py file a prompt-template scan has to look at: the two package"""
+    """Every .py file a prompt-template scan has to look at: evaluation/,
+    fine_tuning/ and the root scripts, minus prompt_format.py itself."""
     files = []
     for directory in (EVALUATION_DIR, FINE_TUNING_DIR):
         files.extend(sorted(directory.rglob("*.py")))
@@ -52,12 +53,9 @@ def scanned_python_files():
 ROOT_MODULES = root_modules()
 NOTEBOOKS = notebooks()
 
-# The dataset is gitignored, so a fresh clone may not have it. Tests that need
-# real records skip (rather than fail) in that case.
-DATASET_MISSING_REASON = f"dataset not present: {DATASET} (run the dataset pipeline)"
-
-# A real attack_paths.json, produced by the infrastructure repo's
-ATTACK_PATHS_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "attack_paths.json"
+# The attack paths scenario generation reads: a snapshot of the graph pipeline's
+# export, kept equal to it by tests/test_exporter.py at the repository root.
+ATTACK_PATHS_FIXTURE = EVALUATION_DIR / "inputs" / "attack_paths.json"
 
 
 # ── Record fixtures ───────────────────────────────────────────────────────────
@@ -88,28 +86,6 @@ def sample_record():
     }
 
 
-class FakeTokenizer:
-    """Stand-in for a HF tokenizer, reproducing Mistral-7B-Instruct-v0.3's chat"""
-
-    bos_token = "<s>"
-    eos_token = "</s>"
-
-    def apply_chat_template(self, messages, tokenize=False, add_generation_prompt=False):
-        text = self.bos_token
-        for message in messages:
-            if message["role"] == "user":
-                text += "[INST] " + message["content"] + "[/INST]"
-            else:
-                text += " " + message["content"].strip() + self.eos_token
-        return text
-
-
-@pytest.fixture
-def fake_tokenizer():
-    """A tokenizer-shaped object whose apply_chat_template matches Mistral's."""
-    return FakeTokenizer()
-
-
 # ── Attack-path fixtures (the cross-repository seam) ──────────────────────────
 
 @pytest.fixture
@@ -121,5 +97,5 @@ def attack_path_records():
 
 @pytest.fixture
 def attack_path(attack_path_records):
-    """The top-ranked exported attack path — one record, exactly six keys."""
+    """The top-ranked exported attack path."""
     return attack_path_records[0]

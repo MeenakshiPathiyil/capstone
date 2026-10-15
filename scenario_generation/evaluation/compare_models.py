@@ -2,9 +2,10 @@
 
 Fine-tuned Mistral-7B against RedSage-Qwen3-8B on the same attack paths.
 
-Both models get the same messages for every (path, prompt) pair, each rendered
-through its own chat template, and the same decoding settings and seed. The
-only thing that changes between the two columns of the report is the model.
+Both models get the same request for every (path, prompt) pair: Mistral in the
+exact format its adapter was trained on, RedSage as the user turn of its own
+chat template. Decoding settings and seed are the same, so the only thing that
+changes between the two columns of the report is the model.
 
 The models load one at a time, in 4-bit: bitsandbytes NF4 on an NVIDIA GPU,
 or MLX on Apple Silicon, where both models are converted from their official
@@ -90,13 +91,13 @@ def build_record(prompt_entry: dict, attack_path: dict) -> dict:
 
 
 def render_prompt(model_key: str, record: dict, tokenizer) -> str:
-    """Same messages for both models, each in its own chat template."""
+    """The same request for both models, each in the format it expects."""
     if model_key == MISTRAL:
         # The exact prompt the adapter was trained on.
-        return prompt_format.build_chat(record, tokenizer, for_training=False)
+        return prompt_format.build_prompt(record)
 
     return tokenizer.apply_chat_template(
-        prompt_format.build_messages(record, for_training=False),
+        [{"role": "user", "content": prompt_format.user_message(record)}],
         tokenize=False,
         add_generation_prompt=True,
         enable_thinking=False,
@@ -132,13 +133,7 @@ def generate(model, tokenizer, prompt: str) -> dict:
     import torch
 
     torch.manual_seed(SEED)
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=pg.MAX_INPUT_TOKENS,
-        add_special_tokens=False,
-    ).to(model.device)
+    inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
 
     started = time.time()
@@ -347,9 +342,8 @@ def build_scorer(args):
         judge.preflight_judge_auth(client)
         return lambda text, label: judge.judge_scenario_safe(client, text, label)
 
-    print("[!] No judge key found, so only the format metrics will be reported. "
-          "Set OPENROUTER_API_KEY or GOOGLE_API_KEY to add the judge.")
-    return None
+    sys.exit("[!] No judge key found. Set OPENROUTER_API_KEY or GOOGLE_API_KEY, "
+             "or pass --no_judge to report the format metrics only.")
 
 
 def judge_all(rows: list, scores_path: Path, score) -> dict:

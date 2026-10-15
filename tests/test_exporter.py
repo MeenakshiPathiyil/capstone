@@ -65,6 +65,12 @@ TRAINING_DATA_SURFACES = {
 
 GOLDEN_FILE = Path(__file__).resolve().parent / "golden_attack_paths.json"
 
+# The copy scenario generation reads, so its notebooks can ship it.
+SCENARIO_INPUT = (
+    Path(__file__).resolve().parent.parent
+    / "scenario_generation" / "evaluation" / "inputs" / "attack_paths.json"
+)
+
 
 # -----------------------------
 
@@ -417,4 +423,13 @@ def test_the_full_export_matches_the_golden_file(tmp_path):
     ), (
         "the export changed — read the diff, then regenerate the golden file "
         "(see the docstring at the top of this module)"
+    )
+
+
+def test_scenario_generation_reads_the_current_export():
+    """Its copy has to move with the golden file, or the scenarios are written
+    for attack paths the graph no longer produces."""
+
+    assert SCENARIO_INPUT.read_bytes() == GOLDEN_FILE.read_bytes(), (
+        "copy tests/golden_attack_paths.json to %s" % SCENARIO_INPUT
     )

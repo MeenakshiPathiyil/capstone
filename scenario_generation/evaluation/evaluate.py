@@ -20,14 +20,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import gc
 from pathlib import Path
 
-# Shared canonical prompt builder (same one used for training) — keeps the eval
-# prompt byte-identical to training so we measure the model, not prompt drift.
+# Shared with training, so the eval prompt is the one the adapter was trained on
+# and the records are the ones it never saw.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "fine_tuning"))
+import data_split  # noqa: E402
 import prompt_format  # noqa: E402
 
 MAX_NEW_TOKENS = 1280
@@ -37,7 +37,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate base vs fine-tuned outputs for manual review")
     parser.add_argument("--base_model", required=True, help="Base model path or HF name (e.g. mistralai/Mistral-7B-Instruct-v0.3)")
     parser.add_argument("--adapter_path", required=True, help="Path to LoRA adapter output folder")
-    parser.add_argument("--test_inputs", required=True, help="Path to test input JSONL (10 entries)")
+    parser.add_argument("--test_inputs", default=data_split.DEFAULT_TEST_INPUTS,
+                        help="Held-out records (default: %(default)s)")
     parser.add_argument("--out_json", required=True, help="Path to save intermediate evaluation_outputs.json")
     parser.add_argument("--out_md", required=True, help="Path to save the manual evaluation worksheet (.md)")
     return parser.parse_args()
@@ -55,29 +56,11 @@ def build_bnb_config() -> BitsAndBytesConfig:
     )
 
 
-def load_test_inputs(path: Path) -> list[dict]:
-    entries = []
-    with path.open("r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                print("[!] Skipping malformed JSON line in test inputs")
-    if not entries:
-        raise ValueError("No valid test input entries found")
-    return entries
-
-
 def generate_text(model, tokenizer, record: dict) -> str:
-    # Canonical prompt (full instruction); build_chat already embeds BOS, so
-    # tokenize with add_special_tokens=False. Decode ONLY the new tokens so the
-    # saved output is the completion, never the echoed prompt.
-    prompt = prompt_format.build_chat(record, tokenizer, for_training=False)
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
-                       max_length=2048, add_special_tokens=False).to(model.device)
+    # The prompt embeds BOS, so tokenize with add_special_tokens=False. Decode
+    # ONLY the new tokens so the saved output is the answer, not the prompt.
+    prompt = prompt_format.build_prompt(record)
+    inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
 
     import torch
@@ -117,10 +100,10 @@ def generate_markdown_worksheet(cache: dict, test_inputs: list[dict], md_path: P
     lines.append("Compare the Scenario Base generation and the Finetuned generation to determine qualitative improvements.\n")
 
     for entry in test_inputs:
-        source_id = entry.get("source_id") or entry.get("_meta", {}).get("source_id") or "Unknown ID"
+        source_id = entry["source_id"]
         if source_id not in cache:
             continue
-            
+
         data = cache[source_id]
         input_text = entry.get("input", "")
         base_output = data.get("base_output", "*No Base Output Generated*")
@@ -129,15 +112,15 @@ def generate_markdown_worksheet(cache: dict, test_inputs: list[dict], md_path: P
         lines.append(f"## Target Source ID: `{source_id}`")
         lines.append("\n**Input Structure Facts:**")
         lines.append("```json\n" + input_text + "\n```")
-        
+
         lines.append("\n### Base Mistral-7B Output")
         lines.append(base_output)
-        
+
         lines.append("\n### Finetuned Mistral-7B Output")
         lines.append(tuned_output)
-        
+
         lines.append("\n---\n")
-        
+
     with md_path.open('w', encoding='utf-8') as f:
         f.write("\n".join(lines))
     print("[✓] Markdown generation complete.")
@@ -150,7 +133,7 @@ def cleanup_memory(model=None, tokenizer=None):
         del model
     if tokenizer is not None:
         del tokenizer
-        
+
     gc.collect()
 
     import torch
@@ -177,12 +160,12 @@ def main() -> None:
     if not test_inputs_path.exists():
         print(f"[!] Test input file not found: {test_inputs_path}")
         sys.exit(1)
-        
-    entries = load_test_inputs(test_inputs_path)
+
+    entries = data_split.read_test_inputs(test_inputs_path)
     cache = load_cache(out_json_path)
 
-    base_needs_gen = [e for e in entries if ("base_output" not in cache.get(e.get("source_id") or e.get("_meta", {}).get("source_id", "NO_ID"), {}))]
-    tuned_needs_gen = [e for e in entries if ("finetuned_output" not in cache.get(e.get("source_id") or e.get("_meta", {}).get("source_id", "NO_ID"), {}))]
+    base_needs_gen = [e for e in entries if "base_output" not in cache.get(e["source_id"], {})]
+    tuned_needs_gen = [e for e in entries if "finetuned_output" not in cache.get(e["source_id"], {})]
 
     # Phase 1: Base Generation (Only if missing from cache)
     if base_needs_gen:
@@ -203,13 +186,10 @@ def main() -> None:
         tokenizer.padding_side = "right"
 
         for idx, entry in enumerate(base_needs_gen, start=1):
-            source_id = entry.get("source_id") or entry.get("_meta", {}).get("source_id")
-            if not source_id: 
-                continue
-                
+            source_id = entry["source_id"]
             print(f"[+] ({idx}/{len(base_needs_gen)}) Generating BASE output for {source_id}")
             output_text = generate_text(base_model, tokenizer, entry)
-            
+
             if source_id not in cache:
                 cache[source_id] = {}
             cache[source_id]["base_output"] = output_text
@@ -230,7 +210,7 @@ def main() -> None:
             quantization_config=bnb_config,
             device_map="auto",
         )
-        
+
         tokenizer = AutoTokenizer.from_pretrained(args.base_model)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -240,18 +220,15 @@ def main() -> None:
         if not adapter_path.exists():
             print(f"[!] Adapter path not found: {adapter_path}")
             sys.exit(1)
-            
+
         finetuned_model = PeftModel.from_pretrained(base_model, str(adapter_path))
         finetuned_model.eval()
 
         for idx, entry in enumerate(tuned_needs_gen, start=1):
-            source_id = entry.get("source_id") or entry.get("_meta", {}).get("source_id")
-            if not source_id: 
-                continue
-                
+            source_id = entry["source_id"]
             print(f"[+] ({idx}/{len(tuned_needs_gen)}) Generating TUNED output for {source_id}")
             output_text = generate_text(finetuned_model, tokenizer, entry)
-            
+
             if source_id not in cache:
                 cache[source_id] = {}
             cache[source_id]["finetuned_output"] = output_text

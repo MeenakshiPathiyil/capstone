@@ -6,7 +6,7 @@ scenarios for the held-out test inputs.
 
 This is the importable, testable home for inference logic — the notebook
 (finetune_output_test.ipynb) just calls into here, so the inference prompt can
-never drift from the training prompt: both use prompt_format.build_chat.
+never drift from the training prompt: both use prompt_format.build_prompt.
 
 Key correctness properties (vs. the old notebook):
   * Uses the SHARED canonical prompt with the FULL instruction (not a one-liner).
@@ -90,8 +90,8 @@ def generate_one(model, tokenizer, record, gen_kwargs):
     """Generate the completion for one record; returns (text, new_token_ids)."""
     import torch
 
-    # build_chat already embeds BOS, so tokenize with add_special_tokens=False.
-    prompt = prompt_format.build_chat(record, tokenizer, for_training=False)
+    # The prompt already embeds BOS, so tokenize with add_special_tokens=False.
+    prompt = prompt_format.build_prompt(record)
     inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
     with torch.no_grad():
@@ -111,8 +111,8 @@ def headers_in_order(text):
 def load_records(args):
     """Held-out test inputs by default; a single dataset index if --index given."""
     if args.index is not None:
-        recs = data_split.load_records(args.data)
-        return [dict(recs[args.index], source_id=data_split.source_id(recs[args.index], args.index))]
+        record = data_split.load_records(args.data)[args.index]
+        return [dict(record, source_id=data_split.source_id(record))]
     return data_split.read_test_inputs(args.test_inputs)
 
 

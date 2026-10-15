@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-# Shared canonical prompt builder (the same one training used) — keeps the
+# The prompt builder training uses, so generation sees the trained format.
 sys.path.insert(0, str(Path(__file__).resolve().parent / "fine_tuning"))
 import prompt_format  # noqa: E402
 
@@ -16,7 +16,6 @@ import prompt_format  # noqa: E402
 BASE_MODEL_DEFAULT  = "mistralai/Mistral-7B-Instruct-v0.3"
 ADAPTER_PATH_DEFAULT = "fine_tuning/output"
 MAX_NEW_TOKENS       = 1200
-MAX_INPUT_TOKENS     = 2048          # matches finetuning.MAX_SEQ_LEN
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -189,27 +188,21 @@ def build_input_block(prompt_entry: dict, attack_path: dict) -> str:
     )
 
 
-def format_model_input(prompt_entry: dict, attack_path: dict, tokenizer=None) -> str:
-    """Return the generation prompt for one (prompt, attack path) pair — the"""
+def format_model_input(prompt_entry: dict, attack_path: dict) -> str:
+    """The generation prompt for one (prompt, attack path) pair, in the trained format."""
     record = {
         "instruction": SYSTEM_INSTRUCTION,
         "input": build_input_block(prompt_entry, attack_path),
     }
-    return prompt_format.build_chat(record, tokenizer, for_training=False)
+    return prompt_format.build_prompt(record)
 
 
 def generate_text(model, tokenizer, prompt_entry: dict, attack_path: dict) -> str:
     """Generate one scenario and return only the newly generated text."""
     import torch
 
-    prompt = format_model_input(prompt_entry, attack_path, tokenizer)
-    inputs = tokenizer(
-        prompt,
-        return_tensors="pt",
-        truncation=True,
-        max_length=MAX_INPUT_TOKENS,
-        add_special_tokens=False,
-    ).to(model.device)
+    prompt = format_model_input(prompt_entry, attack_path)
+    inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
 
     with torch.no_grad():
@@ -425,7 +418,7 @@ def main() -> None:
             print(f"{'─'*70}")
 
             # Recorded for the CSV. generate_text() rebuilds it through the same
-            full_prompt = format_model_input(prompt_entry, attack_path, tokenizer)
+            full_prompt = format_model_input(prompt_entry, attack_path)
 
             print("[*] Generating scenario…")
             scenario = generate_text(

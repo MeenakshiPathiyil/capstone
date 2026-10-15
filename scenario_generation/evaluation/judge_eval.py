@@ -24,7 +24,6 @@ import data_split  # noqa: E402
 JUDGE_MODEL = "gemini-2.5-flash-lite"
 
 MAX_NEW_TOKENS = 1280        # matches evaluate.py / run_inference.py
-MAX_INPUT_TOKENS = 2048      # matches finetuning.MAX_SEQ_LEN
 
 GEMINI_CALL_DELAY = 3        # seconds between judge calls, to stay off the 429 path
 GEMINI_MAX_RETRIES = 6
@@ -212,52 +211,11 @@ def preflight_judge_auth(client) -> None:
         raise
 
 
-# ── Held-out test set (resolved through the ONE shared split) ─────────────────
-
-def resolve_test_records(data_path, test_inputs_path, test_size: int = 10,
-                         val_frac: float = 0.15, seed: int = 42) -> list:
-    """Return the held-out records to judge."""
-    data_path = Path(data_path)
-    test_path = Path(test_inputs_path)
-
-    if data_path.exists():
-        split = data_split.ensure_test_inputs(
-            data_path, test_path,
-            test_size=test_size, val_frac=val_frac, seed=seed,
-        )
-        test_ids = data_split.ids_of(split["test"])
-        pool_ids = data_split.ids_of(split["train"]) | data_split.ids_of(split["val"])
-        if not test_ids.isdisjoint(pool_ids):
-            raise ValueError(
-                "Held-out test set overlaps the train/val pool — refusing to "
-                "judge the fine-tune on data it was trained on."
-            )
-        return split["test"]
-
-    if test_path.exists():
-        records = data_split.read_test_inputs(test_path)
-        if not records:
-            raise ValueError(f"No valid test input entries found in {test_path}")
-        return records
-
-    raise FileNotFoundError(
-        f"Neither the dataset ({data_path}) nor the held-out artifact "
-        f"({test_path}) exists. Run: python evaluation/make_test_inputs.py"
-    )
-
-
-def record_source_id(record: dict, idx: int) -> str:
-    """Stable label for one record, agreeing with data_split.source_id."""
-    return (record.get("source_id")
-            or (record.get("_meta") or {}).get("source_id")
-            or f"entry_{idx:02d}")
-
-
 # ── Prompt + local model generation ───────────────────────────────────────────
 
-def build_eval_prompt(record: dict, tokenizer) -> str:
-    """Return the generation prompt for ``record`` — the canonical one, byte for byte."""
-    return prompt_format.build_chat(record, tokenizer, for_training=False)
+def build_eval_prompt(record: dict) -> str:
+    """The generation prompt for ``record``, exactly as the adapter was trained on it."""
+    return prompt_format.build_prompt(record)
 
 
 def build_bnb_config():
@@ -307,10 +265,8 @@ def generate_text(model, tokenizer, record: dict, label: str = "model") -> str:
     """Run the local model on one record and return only the newly generated text."""
     import torch
 
-    prompt = build_eval_prompt(record, tokenizer)
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
-                       max_length=MAX_INPUT_TOKENS,
-                       add_special_tokens=False).to(model.device)
+    prompt = build_eval_prompt(record)
+    inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     n = inputs["input_ids"].shape[1]
     log(f"  [{label}] Generating... input tokens={n}, max_new_tokens={MAX_NEW_TOKENS}")
 
@@ -489,21 +445,12 @@ def parse_args() -> argparse.Namespace:
                         help="Base model path or HF name (e.g. mistralai/Mistral-7B-Instruct-v0.3)")
     parser.add_argument("--adapter_path", required=True,
                         help="Path to the LoRA adapter output folder (e.g. fine_tuning/output)")
-    parser.add_argument("--test_inputs", required=True,
-                        help="Path to the shared held-out split artifact (evaluation/test_inputs.jsonl)")
+    parser.add_argument("--test_inputs", default=data_split.DEFAULT_TEST_INPUTS,
+                        help="Held-out records to judge (default: %(default)s)")
     parser.add_argument("--out", required=True,
                         help="Path to save the judge scores JSON (e.g. evaluation/judge_scores.json)")
     parser.add_argument("--gemini_key", "--google_api_key", dest="gemini_key", default=None,
                         help="Gemini API key; falls back to GOOGLE_API_KEY / GEMINI_API_KEY / .env")
-    parser.add_argument("--data", default="dataset/training_data.jsonl",
-                        help="Full dataset JSONL the held-out split is derived from "
-                             "(default: dataset/training_data.jsonl)")
-    parser.add_argument("--test_size", type=int, default=10,
-                        help="Number of held-out records to judge (default: 10)")
-    parser.add_argument("--val_frac", type=float, default=0.15,
-                        help="Validation fraction of the train pool, as used in training (default: 0.15)")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Split seed; must match the training run (default: 42)")
     return parser.parse_args()
 
 
@@ -538,7 +485,6 @@ def main() -> None:
         log(f"Max new tokens: {MAX_NEW_TOKENS}")
         log(f"Base model: {args.base_model}")
         log(f"Adapter path: {args.adapter_path}")
-        log(f"Dataset: {args.data}")
         log(f"Test inputs: {args.test_inputs}")
         log(f"Output path: {args.out}")
 
@@ -551,14 +497,10 @@ def main() -> None:
 
         # ── Resolve the held-out set ────────────────
         log_section("RESOLVING HELD-OUT TEST SET")
-        entries = resolve_test_records(
-            args.data, args.test_inputs,
-            test_size=args.test_size, val_frac=args.val_frac, seed=args.seed,
-        )
-        log_ok(f"{len(entries)} held-out entries (seed={args.seed}), "
-               "disjoint from the train/val pool")
+        entries = data_split.read_test_inputs(args.test_inputs)
+        log_ok(f"{len(entries)} held-out entries, none of them trained on")
         for i, entry in enumerate(entries, start=1):
-            log(f"  Entry {i:>2}: source_id={record_source_id(entry, i)!r}, "
+            log(f"  Entry {i:>2}: source_id={entry['source_id']!r}, "
                 f"instruction_len={len(entry.get('instruction', ''))} chars, "
                 f"input_len={len(entry.get('input', ''))} chars")
 
@@ -590,7 +532,7 @@ def main() -> None:
         tuned_totals = []
 
         for idx, entry in enumerate(entries, start=1):
-            source_id = record_source_id(entry, idx)
+            source_id = entry["source_id"]
             instruction = entry.get("instruction", "")
             input_text = entry.get("input", "")
 
