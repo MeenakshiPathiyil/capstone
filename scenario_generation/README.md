@@ -1,468 +1,230 @@
-# Scenario Generation Module
+# Scenario generation
 
-End-to-end pipeline for generating **tri-modal cyber attack scenarios** from MITRE
-ATT&CK STIX data, fine-tuning a QLoRA adapter on `mistralai/Mistral-7B-Instruct-v0.3`,
-and evaluating base vs fine-tuned output quality.
-
-> **Pipeline repair (see [`fine_tuning/CHANGES.md`](fine_tuning/CHANGES.md)).**
-> The QLoRA pipeline was repaired for correctness and train/inference parity:
-> one shared prompt builder, EOS-terminated targets, 2048-token sequences,
-> true 4-bit precision (bf16/fp16 auto), completion-only loss masking, a real
-> eval/early-stopping loop, and a single deterministic held-out split. The
-> sections below describe the **repaired** behaviour.
+Stage 4 of the project. Turns each ranked attack path from the graph pipeline into
+a **tri-modal cyber attack scenario** (narrative, `G = (N, S, V, P, FS)`
+expression, staged attack graph), using a QLoRA fine-tune of
+`mistralai/Mistral-7B-Instruct-v0.3`, and evaluates the result.
 
 ```
-STIX (ATT&CK)  ─▶  parse_stix.py  ─▶  generate_outputs.py  ─▶  training_data.jsonl
-                                                                     │
-                       ┌─────────────────────────────────────────────┤
-                       ▼                                              ▼
-            data_split → test_inputs.jsonl              fine_tune.py (QLoRA)  ─▶  output/ (adapter)
-            (held-out, unseen)                                        │
-                       │                                              ▼
-                       └───▶ run_inference.py / evaluate.py / judge_eval.py / manual_eval_metrics.py
-                                                                      │
-   infra repo: graph/exporter.py  ─▶  output/attack_paths.json  ─▶  prompt_generator.py
-                                          (real ranked paths)         --attack_paths
+ATT&CK STIX ─▶ dataset_pipeline/ ─▶ dataset/training_data.jsonl (81 records)
+                                          │
+                       ┌──────────────────┴───────────────────┐
+                       ▼                                      ▼
+     data_split: 17 held-out records              fine_tuning/ (QLoRA) ─▶ adapter
+     evaluation/test_inputs.jsonl                             │
+                       └──────▶ run_inference / evaluate / judge_eval ◀──┘
+
+../output/attack_paths.json ─▶ evaluation/inputs/attack_paths.json ─▶ prompt_generator.py
+     (graph pipeline)               (committed snapshot)              compare_models.py
 ```
 
-The left half is trained on ATT&CK campaigns; the right half is pointed at a real
-account. The two meet in `prompt_generator.py`, which reads the ranked attack
-paths the infrastructure repo exports and generates one tri-modal scenario per
-prompt per path — see [section 6](#6--scenario-generation-over-real-attack-paths).
+## The adapter, and the format it was trained on
 
----
+The adapter (`fine_tuning/output/`, r=16, alpha=32, attention-only) came from the
+original Colab notebook. Three facts about that run shape everything here:
 
-## Repository Layout
+- **Prompt.** It trained on `<s>[INST] {instruction}\n\n{input} [/INST]\n{output}</s>`.
+  The space before `[/INST]` and the newline after it are not Mistral's chat
+  template. `fine_tuning/prompt_format.py` reproduces this text, token for token,
+  and every training and inference path uses it.
+- **Held-out records.** It trained on 64 of the 81 records. The other 17 are
+  frozen in `fine_tuning/data_split.py` and committed as
+  `evaluation/test_inputs.jsonl`. Evaluation refuses a test file holding any other
+  record.
+- **Truncation.** TRL's default 1024-token limit cut every training example, so
+  the adapter saw only about the first 600 tokens of each answer and never an
+  ending. Expect long outputs that stop at the token cap.
+
+The weights (`adapter_model.safetensors`, about 27 MB) are shared outside git;
+put them in `fine_tuning/output/`. The full story is in
+[`fine_tuning/CHANGES.md`](fine_tuning/CHANGES.md).
+
+## Layout
+
 ```
 scenario_generation/
-├── dataset/
-│   ├── raw/                        ← enterprise-attack-18.1.json (gitignored, download manually)
-│   ├── inputs/                     ← parse_stix.py output: training_inputs.jsonl (gitignored)
-│   └── training_data.jsonl         ← 81 tri-modal training records (gitignored)
-├── dataset_pipeline/
-│   ├── parse_stix.py               ← STIX bundle → structured input JSONs
-│   ├── generate_outputs.py         ← structured inputs → tri-modal records via Claude API
-│   └── requirements.txt
+├── dataset/training_data.jsonl     81 records: instruction, input, output, _meta
+├── dataset_pipeline/               STIX → structured inputs → records (Gemini)
 ├── fine_tuning/
-│   ├── prompt_format.py            ← ★ canonical prompt builder (shared by train + inference)
-│   ├── data_split.py               ← ★ deterministic train/val/test split (keyed on _meta.source_id)
-│   ├── finetuning.py               ← QLoRA training logic (+ --check_data / --smoke / self-test / --merge)
-│   ├── fine_tune.py                ← thin launcher (imports finetuning.main)
-│   ├── run_inference.py            ← ★ importable inference (canonical prompt, decode-only-new)
-│   ├── requirements_finetune.txt   ← pinned to the verified stack (see below)
-│   ├── CHANGES.md                  ← what the repair fixed and why (+ Colab A100/T4 guide)
-│   └── output/
-│       ├── adapter_config.json     ← LoRA config of the shipped adapter
-│       ├── tokenizer_config.json   ← Mistral-7B tokenizer config
-│       ├── chat_template.jinja     ← Mistral chat template
-│       └── README.md               ← auto-generated model card (records the training stack)
+│   ├── prompt_format.py            the trained prompt, shared by every path
+│   ├── data_split.py               the 17 held-out records; train/val from the rest
+│   ├── finetuning.py, fine_tune.py QLoRA training (--check_data, --smoke, --merge)
+│   ├── run_inference.py            generation for the held-out records
+│   ├── requirements_finetune.txt   the ML stack, pinned to the adapter's versions
+│   ├── CHANGES.md                  the pipeline repair and the October correction
+│   └── output/                     adapter config and model card (weights not in git)
 ├── evaluation/
-│   ├── make_test_inputs.py         ← writes the held-out test_inputs.jsonl (uses data_split)
-│   ├── test_inputs.jsonl           ← ★ the shared held-out split artifact (gitignored)
-│   ├── evaluate.py                 ← base vs fine-tuned generations → manual review worksheet
-│                                     (lazy ML imports: imports on a laptop)
-│   ├── judge_eval.py               ← ★ automated Gemini-judge scores (canonical prompt, lazy imports)
-│   ├── requirements_eval.txt       ← judge-only deps (google-genai, python-dotenv)
-│   └── manual_eval_metrics.py      ← reference-free structural metrics (no LLM judge)
-├── prompt_generator.py             ← ★ scenario generation over the real ranked attack paths
-│                                     (`--attack_paths`; the DUMMY_ATTACK_PATH is gone)
-├── tests/                          ← ★ pytest suite (prompt parity, score parsing, split
-│   └── fixtures/attack_paths.json     disjointness, attack-path contract) + a committed
-│                                      real export from the infrastructure repo
-├── pytest.ini                      ← pythonpath so `import judge_eval` / `prompt_format` resolve
-├── create_notebook.py              ← regenerates all three notebooks from the .py sources
-│                                     (the .py files are the source of truth)
-├── colab_finetune_setup.ipynb      ← ★ Colab: ships + runs fine_tune.py (generated)
-├── finetune_output_test.ipynb      ← ★ Colab: ships + runs run_inference.py (generated)
-└── kaggle_prompt_gen.ipynb         ← ★ Kaggle: baseline vs fine-tuned comparison + metrics
-                                      (generated; replaces the old hand-written
-                                       colab_prompt_generator.py)
-
-★ = added / central to the repaired pipeline.
+│   ├── test_inputs.jsonl           the 17 held-out records
+│   ├── inputs/attack_paths.json    snapshot of the graph pipeline's export
+│   ├── evaluate.py                 base vs fine-tuned → manual review worksheet
+│   ├── judge_eval.py               base vs fine-tuned → Gemini judge scores
+│   ├── manual_eval_metrics.py      reference-free format metrics
+│   ├── compare_models.py           fine-tuned Mistral vs RedSage Qwen
+│   └── make_test_inputs.py         rewrites test_inputs.jsonl from the split
+├── prompt_generator.py             scenarios for the real attack paths
+├── create_notebook.py              writes the five notebooks from the .py files
+├── *.ipynb                         generated; never edit by hand
+└── tests/
 ```
 
----
+## 1. Dataset
 
-## 1 — Dataset Pipeline
-
-Install dependencies:
 ```bash
 pip install -r dataset_pipeline/requirements.txt
-```
-
-Download the ATT&CK STIX bundle (~50MB, gitignored):
-```bash
 curl -L -o dataset/raw/enterprise-attack-18.1.json \
   "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack-18.1.json"
+python dataset_pipeline/parse_stix.py --stix dataset/raw/enterprise-attack-18.1.json --out dataset/inputs/
+export GEMINI_API_KEY=...
+python dataset_pipeline/generate_outputs.py --inputs dataset/inputs/training_inputs.jsonl \
+  --out dataset/training_data.jsonl --limit 80
 ```
 
-Parse STIX into structured inputs (→ `dataset/inputs/training_inputs.jsonl`):
-```bash
-python dataset_pipeline/parse_stix.py \
-  --stix dataset/raw/enterprise-attack-18.1.json \
-  --out  dataset/inputs/
-```
+`generate_outputs.py` defaults to `gemma-3-27b-it`. The committed
+`training_data.jsonl` is the one the adapter was trained on; regenerating it
+changes the data under the adapter.
 
-Generate tri-modal training records via the Claude API (→ `dataset/training_data.jsonl`):
-```bash
-export ANTHROPIC_API_KEY=your_key_here
-python dataset_pipeline/generate_outputs.py \
-  --inputs dataset/inputs/training_inputs.jsonl \
-  --out    dataset/training_data.jsonl \
-  --limit  80 \
-  --model  claude-haiku-4-5-20251001
-```
-Result: **81 records** with fields `instruction` / `input` / `output` / `_meta`
-(the `_meta.source_id`, e.g. `C0027`, is the stable id used by the split).
+## 2. Fine-tuning
 
----
-
-## 2 — Fine-Tuning (QLoRA)
-
-**What QLoRA does:** loads Mistral-7B in 4-bit (~4-5GB VRAM), attaches small LoRA
-adapter matrices, and trains only those (≈0.2% of parameters) — runnable on a free
-Colab T4. The repaired pipeline trains true QLoRA: 4-bit NF4 base, bf16/fp16
-compute matched to the trainer's mixed precision, completion-only loss, and
-EOS-terminated targets so the model learns to stop.
-
-Install:
 ```bash
 pip install -r fine_tuning/requirements_finetune.txt
+python fine_tuning/fine_tune.py --check_data      # split and token lengths, no GPU needed
+python fine_tuning/fine_tune.py --smoke --out /tmp/smoke   # 3 steps; no-op without CUDA
+python fine_tuning/fine_tune.py --data dataset/training_data.jsonl --out fine_tuning/output
 ```
 
-### Offline probes (no GPU / no ML stack required)
-```bash
-# Data + prompt-parity probe: asserts the inference prompt is a prefix of the
-# training text, prints token-length stats, flags truncation at --max_seq_len,
-# and checks the train/test split is disjoint. Creates evaluation/test_inputs.jsonl.
-python fine_tuning/fine_tune.py --check_data --data dataset/training_data.jsonl
+Training tokenizes each example itself, with the loss on the answer only, and
+refuses to start if any example would be truncated (`--max_seq_len`, default
+2048; the longest example is 1,683 tokens). It evaluates on the validation split
+each epoch, keeps the best checkpoint, then generates one held-out sample and
+checks it has the three section headers in order and stops before the cap.
+Precision is picked for the GPU: bf16 on A100, fp16 on T4.
 
-# CUDA-guarded 3-step end-to-end run. No-op with a clear message when there's no GPU.
-python fine_tuning/fine_tune.py --smoke --out /tmp/smoke
-```
-
-### Train (locally or on Colab — same script)
-```bash
-python fine_tuning/fine_tune.py \
-  --data dataset/training_data.jsonl \
-  --out  fine_tuning/output \
-  --test_inputs evaluation/test_inputs.jsonl
-```
-The script auto-creates the held-out split (if missing), trains on the complement,
-runs eval each epoch with early stopping + best-checkpoint selection, then runs a
-post-training self-test (generates one held-out sample and asserts the three
-headers appear in order and EOS is hit).
-
-**Precision is auto-selected:** `torch.cuda.is_bf16_supported()` → bf16 compute +
-`bf16=True` on A100; otherwise fp16 compute + `fp16=True` on T4. See
-[`fine_tuning/CHANGES.md`](fine_tuning/CHANGES.md) for the per-device Colab guide.
-
-### Useful flags (all have sensible defaults)
-| Flag | Default | Notes |
+| Flag | Default | |
 |---|---|---|
-| `--epochs` `--lr` | `3` `2e-4` | training length / learning rate |
-| `--r` `--alpha` `--lora_dropout` | `16` `32` `0.05` | LoRA capacity |
-| `--target_modules` | `all` | `all` (all linear), `attn` (attention-only), or a comma list |
-| `--max_seq_len` | `2048` | examples are ≤~1,574 tokens; <2048 truncates some (`--check_data` reports how many) |
-| `--batch_size` `--grad_accum` | `1` `4` | effective batch = 4 |
-| `--test_size` `--val_frac` `--seed` | `10` `0.15` `42` | held-out test count / val fraction / seed |
-| `--merge` | off | also save a merged fp16 model under `output/merged` (needs ~14-16GB) |
-| `--trust_remote_code` | off | unnecessary for Mistral |
+| `--epochs` `--lr` | `3` `2e-4` | |
+| `--r` `--alpha` `--lora_dropout` | `16` `32` `0.05` | |
+| `--target_modules` | `all` | `attn` reproduces the shipped adapter's layers |
+| `--max_seq_len` | `2048` | |
+| `--batch_size` `--grad_accum` | `1` `4` | |
+| `--val_frac` `--seed` | `0.15` `42` | the test set is fixed, see `data_split.py` |
+| `--merge` | off | also save a merged fp16 model (needs ~16 GB) |
 
-### The shipped adapter
-The adapter currently referenced in `output/` was produced by the **pre-repair**
-run (attention-only LoRA, no completion masking, fp32 compute, 64/17 split; see
-`output/README.md` for the exact stack). Re-train with the repaired pipeline to get
-the corrected behaviour (all-linear LoRA by default, completion-only loss,
-EOS-terminated targets, 60/11/10 split). The `*.safetensors` weights are gitignored.
+On Colab, `colab_finetune_setup.ipynb` does the same: it ships the `.py` files
+into the runtime, asks for `training_data.jsonl`, trains and downloads
+`finetuned_adapters.zip`.
 
-### Run in Colab
-Open `colab_finetune_setup.ipynb` (repo root — `create_notebook.py` writes all
-three notebooks next to itself): it checks the GPU, installs the
-pinned requirements, **ships the fixed `.py` modules into the runtime**, has you
-upload `training_data.jsonl`, runs `fine_tune.py`, and downloads
-`finetuned_adapters.zip` + `test_inputs.jsonl`. No training logic lives in the
-notebook — it runs the repaired script, so the fixes always apply. Always download
-the adapter before ending the session (Colab storage is ephemeral).
+## 3. Inference and evaluation
 
----
-
-## 3 — Held-Out Split (single source of truth)
-
-`fine_tuning/data_split.py` produces one deterministic split (seed 42), keyed on
-`_meta.source_id`, persisted to `evaluation/test_inputs.jsonl`. Training, inference,
-and evaluation all read this same artifact, so the held-out test set is provably
-**unseen** (train ∩ test = ∅, asserted by `--check_data`).
-
-Create/regenerate it explicitly (the trainer also auto-creates it):
-```bash
-python evaluation/make_test_inputs.py            # writes evaluation/test_inputs.jsonl
-python evaluation/make_test_inputs.py --force    # regenerate
-```
-Each line carries `idx`, `source_id`, `instruction`, `input`, and the reference
-`output` (used for comparison, never fed to the model).
-
----
-
-## 4 — Inference
-
-Generate scenarios for the held-out test inputs with the fine-tuned adapter:
-```bash
-python fine_tuning/run_inference.py \
-  --adapter fine_tuning/output \
-  --test_inputs evaluation/test_inputs.jsonl \
-  --out fine_tuning/output/inference_results.txt \
-  --samples 3
-```
-Uses the **canonical prompt** (`prompt_format.build_chat`, identical to training),
-sets eos/pad ids so the model stops, and decodes **only the new tokens** (no echoed
-prompt). Add `--compare` for side-by-side base vs fine-tuned output, or
-`--greedy` for deterministic decoding (defaults: sampling, temp 0.7, top_p 0.9,
-repetition_penalty 1.1, `max_new_tokens` 1280). `--smoke` runs a one-sample
-self-test (no-op without a GPU). `finetune_output_test.ipynb` (repo root) is the
-Colab wrapper: it *ships* this script into the runtime and calls it, so the
-notebook cannot hold a prompt of its own.
-
----
-
-## 5 — Evaluation
-
-Two complementary tracks over the **same held-out split**:
-
-* **Structural metrics** (steps 1-2) are **reference-free and deterministic** —
-  no LLM judge — because each metric directly tests a rule the model was trained
-  on (section headers in order, MITRE recall/precision, exact
-  `G = (N, S, V, P, FS)` notation, `->` arrows, numbered stages, no markdown,
-  lexical diversity, truncation).
-* **The Gemini judge** (step 3, `judge_eval.py`) adds the qualitative axis those
-  metrics cannot see — level of detail, technical accuracy, realism, creativity.
-  It needs an API key and is sampled, so it is reported alongside the
-  deterministic metrics, never instead of them.
-
-1. **Produce base vs fine-tuned outputs.** On Kaggle, `kaggle_prompt_gen.ipynb`
-   generates `prompt_gen_comparison.txt` over the held-out inputs. Locally,
-   `evaluate.py` writes a side-by-side **manual review worksheet**:
-   ```bash
-   python evaluation/evaluate.py \
-     --base_model   mistralai/Mistral-7B-Instruct-v0.3 \
-     --adapter_path fine_tuning/output \
-     --test_inputs  evaluation/test_inputs.jsonl \
-     --out_json     evaluation/eval_outputs.json \
-     --out_md       evaluation/manual_eval.md
-   ```
-2. **Score the comparison** with the structural metrics:
-   ```bash
-   python evaluation/manual_eval_metrics.py --txt prompt_gen_comparison.txt --csv
-   ```
-   Outputs `eval_report.md` (baseline vs fine-tuned table + per-prompt breakdown)
-   and `eval_results.csv`.
-3. **Score with the Gemini judge** (automated, 4 criteria x 1-10, base vs
-   fine-tuned on every held-out record):
-   ```bash
-   pip install -r evaluation/requirements_eval.txt
-   export GOOGLE_API_KEY=your_ai_studio_key      # or --gemini_key, or .env
-   python evaluation/judge_eval.py \
-     --base_model   mistralai/Mistral-7B-Instruct-v0.3 \
-     --adapter_path fine_tuning/output \
-     --test_inputs  evaluation/test_inputs.jsonl \
-     --out          evaluation/judge_scores.json
-   ```
-   Both generations use the **canonical prompt** (`prompt_format.build_chat`,
-   `add_special_tokens=False` so BOS is not doubled), the records come from
-   `data_split` (disjointness asserted before the first API call), and the base
-   pass runs with the adapter disabled so "base" really is the base model. Writes
-   per-entry + average scores and prints the comparison table; an unparseable
-   judge reply drops that entry (`unscored`) instead of failing the run.
-
----
-
-## 6 — Scenario Generation over Real Attack Paths
-
-This is the deliverable: `prompt_generator.py` combines every structured prompt in
-its library with every **real** ranked attack path and generates a tri-modal
-scenario for each pair.
+All of these read the 17 held-out records by default.
 
 ```bash
-python3 prompt_generator.py \
-  --attack_paths ../../capstone-feature-infra-model/output/attack_paths.json
+python fine_tuning/run_inference.py --adapter fine_tuning/output --samples 3 --compare
+python evaluation/evaluate.py --base_model mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter_path fine_tuning/output --out_json evaluation/eval_outputs.json \
+  --out_md evaluation/manual_eval.md
+pip install -r evaluation/requirements_eval.txt
+export GOOGLE_API_KEY=...
+python evaluation/judge_eval.py --base_model mistralai/Mistral-7B-Instruct-v0.3 \
+  --adapter_path fine_tuning/output --out evaluation/judge_scores.json
+python evaluation/manual_eval_metrics.py --txt prompt_gen_comparison.txt --csv
 ```
 
-`--attack_paths` is **required**. The paths come from the other half of the
-project: the infrastructure repo builds the security state graph, ranks the
-exploitable routes, and exports one record per path.
+- **Format metrics** (`manual_eval_metrics.py`) are deterministic and need no
+  model: section headers in order, MITRE recall and precision, exact
+  `G = (N, S, V, P, FS)` notation, arrows, numbered stages, no markdown, lexical
+  diversity, truncation.
+- **The Gemini judge** (`judge_eval.py`, `gemini-2.5-flash-lite`) scores level of
+  detail, technical accuracy, realism and creativity from 1 to 10. It generates
+  the base output with the adapter disabled, so "base" really is the base model.
+
+`eval_report.md`, `eval_results.csv` and `prompt_gen_comparison.txt` at this
+folder's root are results from April, produced before the prompt and test set
+were corrected. Treat them as history.
+
+## 4. Scenarios for the real attack paths
 
 ```bash
-# in the infrastructure repo — one command, writes output/attack_paths.json
-cd ../../capstone-feature-infra-model
-python3 -m runner.graph_runner
+python3 -m runner.graph_runner                       # from the repo root
+python3 prompt_generator.py --attack_paths ../output/attack_paths.json
 ```
 
-### It used to be a hardcoded dummy
+Every prompt in the library (P1 to P4) runs against every path. `--prompt_ids`
+and `--path_ids` narrow it; outputs go to `results/`.
 
-`prompt_generator.py` carried a `DUMMY_ATTACK_PATH` constant, so every run
-produced four scenarios about the same invented campaign — the model was never
-conditioned on an account at all, and the "generated from infrastructure" claim
-was only true of the format. That constant is gone; the paths are loaded, and
-validated, from the export.
-
-### The contract
-
-> **Note on technique ids.** These come from the
-> [ATT&CK Cloud/IaaS matrix](https://attack.mitre.org/matrices/enterprise/cloud/iaas/)
-> and are validated against it in the other repo. Two ids the ruleset used to
-> emit — `T1133` (External Remote Services) and `T1567.002` (Exfiltration to
-> Cloud Storage) — are *not* in the IaaS matrix, so the model had been receiving
-> technique ids outside the matrix we cite. They are now `T1021`/`T1078` and
-> `T1537` respectively.
-
-Each entry in `attack_paths.json` carries exactly seven keys, checked at load time
-against `ATTACK_PATH_KEYS` **before the model is loaded** — a missing key would
-otherwise be a `KeyError` raised inside an f-string with 7B of weights already on
-the GPU:
+Each path carries exactly these seven string keys, checked before any model
+loads:
 
 | Key | Example |
 |---|---|
-| `source_id` | `AP-001` — rank order, zero-padded |
-| `source_name` | `OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveRole -> PublicRDS` |
+| `source_id` | `AP-001` |
+| `source_name` | `OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket` |
 | `industry` | `Information technology service activities (ISIC J62)` |
-| `attack_level` | `CRITICAL` / `HIGH` / `MEDIUM` |
-| `techniques` | `T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, ...` (kill-chain order, ATT&CK IaaS matrix) |
-| `surfaces` | `Internet-facing services / user endpoints, Application runtime environment, ...` |
-| `objective` | `Ransomware or destruction` / `Data theft` / `Denial of service` / `Identity takeover` / `Resource hijacking` |
+| `attack_level` | `CRITICAL` / `HIGH` |
+| `techniques` | `T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, ...` (kill-chain order) |
+| `surfaces` | `Internet-facing services / user endpoints, ...` |
+| `objective` | `Data theft` / `Ransomware or destruction` / `Denial of service` / `Identity takeover` / `Resource hijacking` |
 
-`objective` is the newest key and the one that changes what the model should
-write. The same hops are a data-theft scenario or a ransomware scenario depending
-on what the attacker does on arrival, and nothing else in the record distinguishes
-them — the exporter emits one path per objective, so two records can share every
-hop and differ only here.
+The input block adds `OBJECTIVE:` and the prompt's focus to the five lines the
+training records have (`SOURCE`, `INDUSTRY`, `ATTACK LEVEL`, `TECHNIQUES`,
+`SURFACES`). The objective is information the model needs, but it is input the
+adapter never saw.
 
-The three failure modes a teammate will actually hit are each reported as
-themselves: the file has not been copied over from the other repo, the export ran
-before the graph found any paths, or the export is from an older revision that
-wrote different keys.
+## 5. Fine-tuned Mistral vs RedSage Qwen
 
-### Flags
+`evaluation/compare_models.py` runs the fine-tuned Mistral and
+`RISys-Lab/RedSage-Qwen3-8B-Ins` on the same five attack paths (`AP-001`,
+`AP-003`, `AP-007`, `AP-014`, `AP-015`: both entry routes, the four objectives
+the export contains, and the one short path). Each model gets the same request in its own format,
+the same decoding settings and seed, and both are scored with the format metrics
+and the Gemini judge. The judge key is required; `--no_judge` reports the format
+metrics only.
 
-| Flag | Default | Notes |
-|---|---|---|
-| `--attack_paths` | *required* | the exported JSON list; every prompt runs against every path |
-| `--base_model` | `mistralai/Mistral-7B-Instruct-v0.3` | base HF model name or local path |
-| `--adapter_path` | `fine_tuning/output` | LoRA adapter directory |
-| `--output_prefix` | `results/prompt_gen_output` | produces `<prefix>.csv` and `<prefix>.txt` |
-| `--prompt_ids` | all | e.g. `--prompt_ids P1 P3` |
-| `--path_ids` | all | e.g. `--path_ids AP-001 AP-002` |
+On an Apple Silicon Mac (both models converted once to 4-bit MLX, about 28 GB of
+downloads the first time):
 
-Prompting goes through `prompt_format.build_chat` — the same canonical builder
-training used. This file used to build its own
-`f"[INST] {...}\n\n{...} [/INST]"`, with an extra space before the marker and no
-BOS, which is the same one-space bug that made the Gemini judge under-score the
-fine-tune. The heavy imports (torch, transformers, peft) are **lazy**, so
-`--help`, the attack-path loader and the prompt builder all work — and are
-tested — on a machine with no ML stack installed.
+```bash
+python3.12 -m venv .venv && .venv/bin/pip install "mlx-lm==0.32.0"
+export OPENROUTER_API_KEY=...        # or GOOGLE_API_KEY
+.venv/bin/python evaluation/compare_models.py --backend mlx
+```
 
----
+On a GPU, open `colab_compare_models.ipynb` or `kaggle_compare_models.ipynb`.
+Results land in `results/model_comparison/` (`report.md`, `side_by_side.txt`);
+rerunning with the same `--out_dir` skips finished work.
+
+When reading the results:
+
+- The format metrics favour Mistral by construction: it was fine-tuned on this
+  exact format. Compare domain knowledge on the judge's technical accuracy and
+  realism.
+- RedSage's chat template adds its own system prompt; that is the model's
+  default and is left in.
+- On MLX both models are 4-bit MLX rather than the NF4 the adapter was trained
+  with: fair between the two, slightly different from training.
 
 ## Tests
+
 ```bash
-python3 -m pytest -q          # 94 tests, run from scenario_generation/
-```
-Offline and dependency-free (stdlib + pytest, Python 3.9): the eval prompt and the
-`prompt_generator.py` prompt are both byte-identical to the training prompt,
-judge-score parsing survives fenced and malformed replies, the held-out split is
-disjoint from training, and the seven-key attack-path contract is pinned against a
-committed real export (`tests/fixtures/attack_paths.json`) with one prompt
-asserted per exported path.
-
-**Two guards whose scope is derived rather than listed**, because both were
-previously defeated by a file sitting outside them rather than by a wrong
-assertion:
-
-* *No hand-rolled prompts.* Nothing outside `prompt_format.py` may build an
-  `[INST]` string. The scan covers every `.py` under `evaluation/` and
-  `fine_tuning/`, **every script at the repo root**, and **every `.ipynb`** —
-  notebooks are JSON, so a `*.py` glob could not see the two stale ones that held
-  live drifted templates. A notebook may only contain the markers inside a
-  verbatim copy of a repository module it ships into its runtime, and that copy is
-  asserted **byte-identical to the file on disk**, so a notebook that has drifted
-  from the source of truth fails. The coverage test asserts an exact file set: a
-  subset check can never fail because a file dropped out of the scan.
-* *Imports are cheap.* Every module under `evaluation/` and `fine_tuning/` and
-  every root-level script is exec'd in a fresh interpreter and asserted to pull in
-  none of torch / transformers / peft / trl / datasets / bitsandbytes / accelerate
-  / google-genai. `evaluation/evaluate.py` used to import three of them at module
-  scope, and this sentence in the README was the only thing asserting otherwise.
-  (`visualize_dataset.py` is exempt for matplotlib alone — it is a plotting
-  utility, and matplotlib is not the ML stack.)
-
----
-
-## Output Format
-
-Each record's `output` is exactly three plain-text sections (no markdown), in order
-(the full rules live in every record's `instruction`):
-
-```
-[NATURAL LANGUAGE]
-Readable attack narrative; references each MITRE technique ID inline, e.g. (T1190).
-
-[MATHEMATICAL EXPRESSION]
-N  = {n1: Employee Endpoint, n2: Web Application Server, ...}   # nodes
-S  = {s1: Deserialization Vulnerability, ...}                   # states / weaknesses
-V  = {v1: T1087.003 - Phishing, ...}                            # techniques (ATT&CK IDs)
-P  = {p1: n1 -> n2, p2: n2 -> n3, ...}                          # transitions
-FS = {Data Exfiltration and Ransom Demand}                      # final state / objective
-G = (N, S, V, P, FS)
-
-[ATTACK GRAPH]
-Stage 1 (Initial Access): Employee Endpoint [T1087.003] -> Web Application Server
-Stage 2 (Exploitation):   Web Application Server [T1190] -> Cloud Metadata Service
-...
+python3 -m pytest -q         # from here, or from the repo root for every test
 ```
 
----
+Python 3.9 with PyYAML and pytest; no ML stack. They pin the trained prompt, the
+held-out split, judge-score parsing and the attack-path contract. Two guards
+derive their scope instead of listing it:
 
-## Requirements / target stack
+- **No hand-rolled prompts.** Nothing outside `prompt_format.py` may build an
+  `[INST]` string. The scan covers every `.py` here and every notebook; a notebook
+  may only hold the markers inside a verbatim copy of a module it ships, and that
+  copy must equal the file on disk.
+- **Cheap imports.** Every module is imported in a fresh interpreter and must not
+  pull in torch, transformers, peft, trl, datasets, bitsandbytes, accelerate or
+  google-genai.
 
-Fine-tuning is pinned (`fine_tuning/requirements_finetune.txt`) to the stack that
-produced the shipped adapter (`output/README.md`): **Transformers 5.x · TRL 0.29.x
-· PEFT 0.18.x · datasets 4.x · torch ≥2.4 · bitsandbytes 0.47–0.49 · accelerate
-≥1.1**, Python 3.12. The code branches on the TRL/transformers API differences
-(`max_length` vs `max_seq_length`, `processing_class` vs `tokenizer`, the
-completion-only collator), so nearby versions also work.
+## Notebooks
 
-## Regenerating the notebooks
-
-The notebooks are generated from the `.py` sources (the source of truth) — never
-edit them by hand:
 ```bash
-python create_notebook.py    # rewrites the 3 notebooks, embedding the fixed modules
+python create_notebook.py
 ```
-All three land **next to `create_notebook.py`**, at the repository root. There is
-deliberately no copy under `fine_tuning/`: two stale forks lived there for months,
-the README pointed at them, and they trained and inferred with a prompt no
-`.py` file in the repository emitted. `tests/test_no_hand_rolled_prompts.py`
-asserts the shipped module copies inside each notebook are byte-identical to the
-files on disk, so a notebook that has not been regenerated after a change to
-`prompt_format.py` fails the suite instead of quietly running the old prompt.
 
-## Known notes
-- Dataset/adapter files (`training_data.jsonl`, `inputs/`, `raw/`, `*.safetensors`,
-  `test_inputs.jsonl`) are gitignored — run the pipeline scripts to reproduce them.
-- 81 records is a small dataset; `eval_loss` is noisy (the trainer warns about this).
-- Colab storage is ephemeral — download the adapter zip before ending the session.
-- `attack_paths.json` is produced by the *other* repository and is not tracked here;
-  `tests/fixtures/attack_paths.json` is a committed copy of a real export, used only
-  to pin the contract offline. Regenerate the live one with
-  `python3 -m runner.graph_runner` in `capstone-feature-infra-model/`.
-- Three files were **deleted** as pre-repair duplicates, each of which carried its
-  own drifted `[INST]` template while the guard could not see it:
-  `colab_prompt_generator.py` (a hand-maintained cell-script superseded by the
-  generated `kaggle_prompt_gen.ipynb`, and the last holder of the dummy attack
-  path), and `fine_tuning/colab_finetune_setup.ipynb` +
-  `fine_tuning/finetune_output_test.ipynb` (stale forks of the notebooks
-  `create_notebook.py` generates at the repo root). The guard now scans every
-  root-level script and every notebook, and asserts the deleted paths stay gone —
-  see `tests/test_no_hand_rolled_prompts.py`. Recover them from git history if
-  the pre-repair text is ever needed as evidence.
-- Items verified offline vs. on-Colab-only are listed at the end of
-  [`fine_tuning/CHANGES.md`](fine_tuning/CHANGES.md).
+Writes all five notebooks from the `.py` sources. A test fails when a notebook's
+copy of a module is out of date, so run this after changing any shipped module.
