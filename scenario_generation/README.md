@@ -146,7 +146,7 @@ python evaluation/make_test_inputs.py \
 
 Evaluate base vs fine-tuned model:
 ```bash
-export ANTHROPIC_API_KEY=your_key_here
+export GOOGLE_API_KEY=your_key_here
 python evaluation/evaluate.py \
   --base_model   mistralai/Mistral-7B-Instruct-v0.3 \
   --adapter_path fine_tuning/output \
