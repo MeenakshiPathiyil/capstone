@@ -1,0 +1,325 @@
+# MITRE ATT&CK — Enterprise / Cloud / IaaS matrix.
+#
+# Source: https://attack.mitre.org/matrices/enterprise/cloud/iaas/
+#
+# THEORY (why this file exists):
+# graph/exporter.py orders a path's techniques by the phase an attacker uses them
+# in, and that ordering used to come from a hand-written dict inside the exporter.
+# A hand-written mapping drifts and cannot be checked against anything. This file
+# is the IaaS matrix itself, so the ordering is ATT&CK's rather than ours, and a
+# rule citing a technique outside this file is a rule citing a technique that is
+# not in the cloud matrix — which tests/test_security_rules.py now rejects.
+#
+# WHY IaaS AND NOT ENTERPRISE:
+# Our target is cloud infrastructure, so a technique must be in the IaaS matrix to
+# be a claim we can defend. Two techniques the ruleset used to cite are NOT in it:
+#   T1133 (External Remote Services) — IaaS initial access is T1190/T1199/T1078
+#   T1567.002 (Exfiltration to Cloud Storage) — IaaS exfiltration is T1048/T1537
+# Both were replaced rather than kept.
+#
+# PRIMARY TACTIC:
+# ATT&CK lists several techniques under more than one tactic (T1078 appears under
+# initial access, persistence, privilege escalation and stealth). Ordering a
+# narrative needs exactly one position per technique, so each entry below carries
+# one `tactic` — the point in a chain where an attacker is first using it — and
+# `also` records the other tactics ATT&CK lists it under, so nothing is lost.
+
+# The order this project narrates an attack in. The index of a tactic here is a
+# technique's rank.
+#
+# NOT ATT&CK's ordering. ATT&CK has none: its FAQ says "ATT&CK Tactics are
+# unordered and may not all occur in a single intrusion", and its own listing
+# puts credential access after privilege escalation, which this reverses. The
+# sequence below is ours, chosen so a generated scenario reads as a narrative.
+# See docs/research/precondition-sources.md.
+tactics:
+  - initial access
+  - execution
+  - persistence
+  - privilege escalation
+  - stealth
+  - defense impairment
+  - credential access
+  - discovery
+  - lateral movement
+  - collection
+  - exfiltration
+  - impact
+
+techniques:
+
+  # ── initial access ────────────────────────────────────────────────────────
+  - id: T1190
+    name: Exploit Public-Facing Application
+    tactic: initial access
+
+  - id: T1199
+    name: Trusted Relationship
+    tactic: initial access
+
+  - id: T1078
+    name: Valid Accounts
+    tactic: initial access
+    also: [persistence, privilege escalation, stealth]
+
+  - id: T1078.004
+    name: "Valid Accounts: Cloud Accounts"
+    tactic: initial access
+    also: [persistence, privilege escalation, stealth]
+
+  # ── execution ─────────────────────────────────────────────────────────────
+  - id: T1651
+    name: Cloud Administration Command
+    tactic: execution
+
+  - id: T1059
+    name: Command and Scripting Interpreter
+    tactic: execution
+
+  - id: T1648
+    name: Serverless Execution
+    tactic: execution
+
+  - id: T1204
+    name: User Execution
+    tactic: execution
+
+  # ── persistence ───────────────────────────────────────────────────────────
+  - id: T1136
+    name: Create Account
+    tactic: persistence
+
+  - id: T1525
+    name: Implant Internal Image
+    tactic: persistence
+
+  - id: T1546
+    name: Event Triggered Execution
+    tactic: persistence
+    also: [privilege escalation]
+
+  - id: T1556
+    name: Modify Authentication Process
+    tactic: persistence
+    also: [defense impairment, credential access]
+
+  # ── privilege escalation ──────────────────────────────────────────────────
+  - id: T1098
+    name: Account Manipulation
+    tactic: privilege escalation
+    also: [persistence]
+
+  - id: T1098.001
+    name: "Account Manipulation: Additional Cloud Credentials"
+    tactic: privilege escalation
+    also: [persistence]
+
+  - id: T1098.003
+    name: "Account Manipulation: Additional Cloud Roles"
+    tactic: privilege escalation
+    also: [persistence]
+
+  - id: T1548
+    name: Abuse Elevation Control Mechanism
+    tactic: privilege escalation
+
+  - id: T1548.005
+    name: "Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access"
+    tactic: privilege escalation
+
+  # ── stealth ───────────────────────────────────────────────────────────────
+  - id: T1211
+    name: Exploitation for Stealth
+    tactic: stealth
+
+  - id: T1535
+    name: Unused/Unsupported Cloud Regions
+    tactic: stealth
+
+  # ── defense impairment ────────────────────────────────────────────────────
+  - id: T1685
+    name: Disable or Modify Tools
+    tactic: defense impairment
+
+  - id: T1687
+    name: Exploitation for Defense Impairment
+    tactic: defense impairment
+
+  - id: T1578
+    name: Modify Cloud Compute Infrastructure
+    tactic: defense impairment
+
+  - id: T1578.002
+    name: "Modify Cloud Compute Infrastructure: Create Cloud Instance"
+    tactic: defense impairment
+
+  - id: T1666
+    name: Modify Cloud Resource Hierarchy
+    tactic: defense impairment
+
+  # ── credential access ─────────────────────────────────────────────────────
+  - id: T1110
+    name: Brute Force
+    tactic: credential access
+
+  - id: T1555
+    name: Credentials from Password Stores
+    tactic: credential access
+
+  - id: T1606
+    name: Forge Web Credentials
+    tactic: credential access
+
+  - id: T1621
+    name: Multi-Factor Authentication Request Generation
+    tactic: credential access
+
+  - id: T1040
+    name: Network Sniffing
+    tactic: credential access
+    also: [discovery]
+
+  - id: T1528
+    name: Steal Application Access Token
+    tactic: credential access
+
+  - id: T1552
+    name: Unsecured Credentials
+    tactic: credential access
+
+  - id: T1552.005
+    name: "Unsecured Credentials: Cloud Instance Metadata API"
+    tactic: credential access
+
+  # ── discovery ─────────────────────────────────────────────────────────────
+  - id: T1087
+    name: Account Discovery
+    tactic: discovery
+
+  - id: T1580
+    name: Cloud Infrastructure Discovery
+    tactic: discovery
+
+  - id: T1538
+    name: Cloud Service Dashboard
+    tactic: discovery
+
+  - id: T1526
+    name: Cloud Service Discovery
+    tactic: discovery
+
+  - id: T1619
+    name: Cloud Storage Object Discovery
+    tactic: discovery
+
+  - id: T1680
+    name: Local Storage Discovery
+    tactic: discovery
+
+  - id: T1654
+    name: Log Enumeration
+    tactic: discovery
+
+  - id: T1046
+    name: Network Service Discovery
+    tactic: discovery
+
+  - id: T1201
+    name: Password Policy Discovery
+    tactic: discovery
+
+  - id: T1069
+    name: Permission Groups Discovery
+    tactic: discovery
+
+  - id: T1518
+    name: Software Discovery
+    tactic: discovery
+
+  - id: T1082
+    name: System Information Discovery
+    tactic: discovery
+
+  - id: T1614
+    name: System Location Discovery
+    tactic: discovery
+
+  - id: T1049
+    name: System Network Connections Discovery
+    tactic: discovery
+
+  # ── lateral movement ──────────────────────────────────────────────────────
+  - id: T1021
+    name: Remote Services
+    tactic: lateral movement
+
+  - id: T1021.007
+    name: "Remote Services: Cloud Services"
+    tactic: lateral movement
+
+  - id: T1550
+    name: Use Alternate Authentication Material
+    tactic: lateral movement
+
+  # ── collection ────────────────────────────────────────────────────────────
+  - id: T1119
+    name: Automated Collection
+    tactic: collection
+
+  - id: T1530
+    name: Data from Cloud Storage
+    tactic: collection
+
+  - id: T1213
+    name: Data from Information Repositories
+    tactic: collection
+
+  - id: T1074
+    name: Data Staged
+    tactic: collection
+
+  # ── exfiltration ──────────────────────────────────────────────────────────
+  - id: T1048
+    name: Exfiltration Over Alternative Protocol
+    tactic: exfiltration
+
+  - id: T1537
+    name: Transfer Data to Cloud Account
+    tactic: exfiltration
+
+  # ── impact ────────────────────────────────────────────────────────────────
+  - id: T1531
+    name: Account Access Removal
+    tactic: impact
+
+  - id: T1485
+    name: Data Destruction
+    tactic: impact
+
+  - id: T1486
+    name: Data Encrypted for Impact
+    tactic: impact
+
+  - id: T1491
+    name: Defacement
+    tactic: impact
+
+  - id: T1499
+    name: Endpoint Denial of Service
+    tactic: impact
+
+  - id: T1490
+    name: Inhibit System Recovery
+    tactic: impact
+
+  - id: T1498
+    name: Network Denial of Service
+    tactic: impact
+
+  - id: T1496
+    name: Resource Hijacking
+    tactic: impact
+
+  - id: T1489
+    name: Service Stop
+    tactic: impact

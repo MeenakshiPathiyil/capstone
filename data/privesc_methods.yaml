@@ -1,0 +1,295 @@
+# AWS IAM privilege escalation methods.
+#
+# Source: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation
+#         (Rhino Security Labs — Spencer Gietzen)
+#
+# THEORY (why a catalogue instead of one wildcard rule):
+# The ruleset used to detect exactly one form of over-permission —
+# `Action: "*"` on `Resource: "*"`. That is the crudest case and close to the
+# rarest: a real over-permissive role almost never says `*:*`, it says
+# `iam:PassRole` plus `lambda:CreateFunction`, which grants the same thing by a
+# longer route. Detecting only the wildcard means detecting the roles nobody
+# actually writes, and missing the ones everybody does.
+#
+# THEORY (why this changes the GRAPH and not only the ruleset):
+# Each method below escalates *to* something, and `escalates_to` records what.
+# That is the part the old wildcard rule could not express. `build_capability_edges`
+# only ever drew IAM -> data edges, so the graph could not represent "role A can
+# become role B, which can become role C, which reads the database". Classes B and
+# C below are principal -> principal, so with them the graph carries multi-step
+# escalation chains, which is what an attack graph of a cloud account mostly is.
+#
+# FIELDS:
+#   id             our identifier, used as the rule/state id
+#   method         Rhino's method name
+#   class          A policy_grant | B credential_theft | C pass_role | D hijack_compute
+#   requires       IAM actions the principal must ALL hold (wildcards expand, so
+#                  `iam:*` satisfies `iam:PassRole`)
+#   principal_types  for escalates_to: principal, the principal types the API
+#                  actually acts on. iam:AttachRolePolicy attaches to a ROLE, so
+#                  drawing an edge from it to an instance profile is a route no
+#                  attacker can walk — and it manufactured a duplicate of every
+#                  path, one with the profile detour and one without.
+#   escalates_to   what the attacker gains, and therefore the edge that is drawn:
+#                    self             -> the principal becomes effectively admin
+#                    principal        -> any other IAM principal in the account
+#                    passable_role    -> any role this principal is able to pass
+#                    compute          -> a compute resource, and thence its role
+#   severity       lowercase, same contract as security_rules.yaml
+#   techniques     ATT&CK IaaS ids; every one must exist in attack_techniques.yaml
+#
+# NOTE ON SEVERITY:
+# `critical` is reserved for a method that reaches administrator in one step with
+# no preconditions beyond the permission itself. Methods needing a second resource
+# to exist (a passable role, an existing Lambda) are `high` — still a real
+# escalation, but it depends on the account containing something to abuse.
+
+methods:
+
+  # ── Class A: rewrite a policy, become administrator ───────────────────────
+  - id: PRIVESC_CREATE_POLICY_VERSION
+    method: Creating a new policy version
+    class: policy_grant
+    requires: ["iam:CreatePolicyVersion"]
+    escalates_to: self
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_SET_DEFAULT_POLICY_VERSION
+    method: Setting the default policy version to an existing version
+    class: policy_grant
+    requires: ["iam:SetDefaultPolicyVersion"]
+    escalates_to: self
+    severity: high
+    techniques: [T1098]
+
+  - id: PRIVESC_ATTACH_USER_POLICY
+    method: Attaching a policy to a user
+    class: policy_grant
+    requires: ["iam:AttachUserPolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_ATTACH_GROUP_POLICY
+    method: Attaching a policy to a group
+    class: policy_grant
+    requires: ["iam:AttachGroupPolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::Group]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_ATTACH_ROLE_POLICY
+    method: Attaching a policy to a role
+    class: policy_grant
+    requires: ["iam:AttachRolePolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::Role]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_PUT_USER_POLICY
+    method: Creating or updating an inline policy for a user
+    class: policy_grant
+    requires: ["iam:PutUserPolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_PUT_GROUP_POLICY
+    method: Creating or updating an inline policy for a group
+    class: policy_grant
+    requires: ["iam:PutGroupPolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::Group]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_PUT_ROLE_POLICY
+    method: Creating or updating an inline policy for a role
+    class: policy_grant
+    requires: ["iam:PutRolePolicy"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::Role]
+    severity: critical
+    techniques: [T1098]
+
+  - id: PRIVESC_ADD_USER_TO_GROUP
+    method: Adding a user to a group
+    class: policy_grant
+    requires: ["iam:AddUserToGroup"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: high
+    techniques: [T1098]
+
+  # ── Class B: take another principal's credentials ─────────────────────────
+  - id: PRIVESC_CREATE_ACCESS_KEY
+    method: Creating a new user access key
+    class: credential_theft
+    requires: ["iam:CreateAccessKey"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: critical
+    techniques: [T1098.001]
+
+  - id: PRIVESC_CREATE_LOGIN_PROFILE
+    method: Creating a new login profile
+    class: credential_theft
+    requires: ["iam:CreateLoginProfile"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: critical
+    techniques: [T1098.001]
+
+  - id: PRIVESC_UPDATE_LOGIN_PROFILE
+    method: Updating an existing login profile
+    class: credential_theft
+    requires: ["iam:UpdateLoginProfile"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::User]
+    severity: critical
+    techniques: [T1098.001]
+
+  - id: PRIVESC_UPDATE_ASSUME_ROLE_POLICY
+    method: Updating the AssumeRolePolicyDocument of a role
+    class: credential_theft
+    requires: ["iam:UpdateAssumeRolePolicy", "sts:AssumeRole"]
+    escalates_to: principal
+    principal_types: [AWS::IAM::Role]
+    severity: critical
+    techniques: [T1098.003, T1548.005]
+
+  # ── Class C: pass a role to a service that runs code ──────────────────────
+  - id: PRIVESC_PASSROLE_EC2
+    method: Creating an EC2 instance with an existing instance profile
+    class: pass_role
+    requires: ["iam:PassRole", "ec2:RunInstances"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1578.002, T1552.005]
+
+  - id: PRIVESC_PASSROLE_LAMBDA_INVOKE
+    method: Passing a role to a new Lambda function, then invoking it
+    class: pass_role
+    requires: ["iam:PassRole", "lambda:CreateFunction", "lambda:InvokeFunction"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1648]
+
+  - id: PRIVESC_PASSROLE_LAMBDA_CROSS_ACCOUNT
+    method: Passing a role to a new Lambda function, then invoking it cross-account
+    class: pass_role
+    requires: ["iam:PassRole", "lambda:CreateFunction", "lambda:AddPermission"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1648, T1199]
+
+  - id: PRIVESC_PASSROLE_LAMBDA_DYNAMODB
+    method: Passing a role to a new Lambda function, then triggering it with DynamoDB
+    class: pass_role
+    requires:
+      - "iam:PassRole"
+      - "lambda:CreateFunction"
+      - "lambda:CreateEventSourceMapping"
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1648, T1546]
+
+  - id: PRIVESC_PASSROLE_GLUE_DEV_ENDPOINT
+    method: Passing a role to a Glue Development Endpoint
+    class: pass_role
+    requires: ["iam:PassRole", "glue:CreateDevEndpoint"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1059]
+
+  - id: PRIVESC_PASSROLE_CLOUDFORMATION
+    method: Passing a role to CloudFormation
+    class: pass_role
+    requires: ["iam:PassRole", "cloudformation:CreateStack"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1651]
+
+  - id: PRIVESC_PASSROLE_DATA_PIPELINE
+    method: Passing a role to Data Pipeline
+    class: pass_role
+    requires:
+      - "iam:PassRole"
+      - "datapipeline:CreatePipeline"
+      - "datapipeline:PutPipelineDefinition"
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1059]
+
+  - id: PRIVESC_PASSROLE_SAGEMAKER
+    method: Passing a role to a new SageMaker Jupyter notebook
+    class: pass_role
+    requires:
+      - "iam:PassRole"
+      - "sagemaker:CreateNotebookInstance"
+      - "sagemaker:CreatePresignedNotebookInstanceUrl"
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1059]
+
+  - id: PRIVESC_PASSROLE_CODESTAR
+    method: Passing a role to a new CodeStar project
+    class: pass_role
+    requires: ["iam:PassRole", "codestar:CreateProject"]
+    escalates_to: passable_role
+    severity: high
+    techniques: [T1078.004, T1651]
+
+  - id: PRIVESC_CODESTAR_FROM_TEMPLATE
+    method: Creating a CodeStar project from a template
+    class: pass_role
+    requires: ["codestar:CreateProjectFromTemplate"]
+    escalates_to: self
+    severity: high
+    techniques: [T1098, T1651]
+
+  - id: PRIVESC_CODESTAR_ASSOCIATE_TEAM_MEMBER
+    method: Creating a new CodeStar project and associating a team member
+    class: policy_grant
+    requires: ["codestar:CreateProject", "codestar:AssociateTeamMember"]
+    escalates_to: self
+    severity: high
+    techniques: [T1098]
+
+  # ── Class D: hijack compute that already holds a role ─────────────────────
+  - id: PRIVESC_LAMBDA_UPDATE_CODE
+    method: Updating the code of an existing Lambda function
+    class: hijack_compute
+    requires: ["lambda:UpdateFunctionCode"]
+    escalates_to: compute
+    severity: high
+    techniques: [T1648, T1078.004]
+
+  - id: PRIVESC_LAMBDA_UPDATE_CONFIG
+    method: Adding a malicious Lambda layer to an existing Lambda function
+    class: hijack_compute
+    requires: ["lambda:UpdateFunctionConfiguration"]
+    escalates_to: compute
+    severity: high
+    techniques: [T1648, T1525]
+
+  - id: PRIVESC_GLUE_UPDATE_DEV_ENDPOINT
+    method: Updating an existing Glue Dev Endpoint
+    class: hijack_compute
+    requires: ["glue:UpdateDevEndpoint"]
+    escalates_to: compute
+    severity: high
+    techniques: [T1059, T1078.004]
+
+  - id: PRIVESC_SAGEMAKER_PRESIGNED_URL
+    method: Gaining access to an existing SageMaker Jupyter notebook
+    class: hijack_compute
+    requires: ["sagemaker:CreatePresignedNotebookInstanceUrl"]
+    escalates_to: compute
+    severity: high
+    techniques: [T1059, T1552]

@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Nested-stack fixture. The attack chain is deliberately split across three
+  files so that no single template contains it: the open security group is in
+  network.yaml, the instance and its role are in web.yaml, and the bucket the
+  role can read is in data.yaml. Analysed one file at a time this account has no
+  attack path. Merged, it has one.
+
+Resources:
+
+  Network:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/example-bucket/nested/network.yaml
+
+  Data:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/example-bucket/nested/data.yaml
+
+  Web:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/example-bucket/nested/web.yaml
+      Parameters:
+        # Cross-stack: resolved through Network's Outputs to the group itself.
+        WebSecurityGroup: !GetAtt Network.Outputs.OpenGroup
