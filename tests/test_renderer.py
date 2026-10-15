@@ -37,7 +37,9 @@ GOLDEN_DOT = Path(__file__).resolve().parent / "golden_security_state_graph.dot"
 
 # -----------------------------
 
-# Written against the *format*, not against graph/renderer.py's constants. The
+# Written against the *format*, not against attack_path/renderer.py's constants. The
+# patterns say what each grammar accepts, so a constant changed to something the
+# diagram tool would reject fails here instead of agreeing with itself.
 MERMAID_NODE = re.compile(
     r"^ {4}(n_\w+)(\(\[|\[\(|\{\{|\[)\"(.*)\"(\]\)|\)\]|\}\}|\])$"
 )
@@ -329,6 +331,8 @@ def linkstyle_indices(text):
 # -----------------------------
 
 # Hand-built as a to_dict() dictionary, because the point is label content the
+# shipped dataset does not contain: an arrow, a hash, a double quote, two ids
+# that derive one identifier, and a severity no rule uses.
 HOSTILE_GRAPH = {
     "summary": {
         "resources": 4,
@@ -437,7 +441,10 @@ def test_the_dot_render_is_structurally_sound(dot):
 
 
 def test_the_mermaid_header_is_the_first_line(mermaid):
-    """A comment block would be legal ahead of it — Mermaid's %%{init}%% directive"""
+    """A comment block would be legal ahead of it, and so would Mermaid's %%{init}%%
+    directive, but the renderer emits nothing before the header: line 1 is always
+    the diagram type.
+    """
 
     assert mermaid.split("\n")[0] == "flowchart LR"
 
@@ -499,7 +506,12 @@ def test_the_structural_checkers_are_not_vacuous(mermaid, dot, fmt, label, corru
 # -----------------------------
 
 def test_both_formats_declare_the_same_nodes(mermaid, dot, real_graph):
-    """THE ASSERTION THAT MAKES ONE MODULE WORTH IT."""
+    """THE ASSERTION THAT MAKES ONE MODULE WORTH IT.
+
+    Both formats are drawn by one module from one node_tokens() map, so they must
+    declare the same identifiers, exactly one per resource. Two renderers written
+    separately could drift apart without either file looking wrong.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -514,7 +526,10 @@ def test_both_formats_declare_the_same_edges(mermaid, dot):
 
 
 def test_every_drawn_node_is_a_resource_of_the_account(mermaid, dot, real_graph):
-    """The other direction: nothing in either file is a node the graph does not"""
+    """The other direction: nothing in either file is a node the graph does not
+    contain. Every drawn identifier maps back through node_tokens() to a resource
+    id in the state graph.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -529,7 +544,11 @@ def test_every_drawn_node_is_a_resource_of_the_account(mermaid, dot, real_graph)
 
 
 def test_the_drawn_edges_are_the_traversal_view(mermaid, dot, real_graph):
-    """The attacker's direction, not the declared one. Drawn over the stored edges"""
+    """The attacker's direction, not the declared one. Drawn over the stored edges
+    the arrows would point the way the template declares references, which for a
+    network_control edge is backwards: the instance names its security group, but
+    the attack runs from the group into the instance.
+    """
 
     artifact = real_graph.to_dict()
     tokens = node_tokens(artifact)
@@ -556,7 +575,10 @@ def test_the_drawn_edges_are_the_traversal_view(mermaid, dot, real_graph):
 
 
 def test_the_reversed_edge_says_so_in_its_label(mermaid, dot, real_graph):
-    """The decision graph/state_graph.py exists to make, visible in the picture"""
+    """The decision security_state_graph/state_graph.py exists to make, visible in the picture:
+    an arrow running against the declared reference is labelled "reversed", so a
+    reader comparing the diagram with the template sees why it points that way.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -583,7 +605,12 @@ def test_exactly_the_ranked_path_hops_are_emphasised(
     real_graph,
     real_paths
 ):
-    """THE REQUIREMENT THE DIAGRAM EXISTS FOR."""
+    """THE REQUIREMENT THE DIAGRAM EXISTS FOR.
+
+    The ranked paths have to stand out from the rest of the graph. Every hop of
+    every path find_attack_paths() returns is thick in Mermaid and drawn in
+    EMPHASIS_COLOR at EMPHASIS_WIDTH in DOT, and no other edge is.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -628,7 +655,9 @@ def test_an_emphasised_edge_names_the_paths_that_use_it(
     real_graph,
     real_paths
 ):
-    """A hop two paths share is labelled with both AP ids, in rank order, or a"""
+    """A hop two paths share is labelled with both AP ids, in rank order, or a
+    reader tracing one path would lose it where the paths meet.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -665,7 +694,10 @@ def test_an_emphasised_edge_names_the_paths_that_use_it(
 
 
 def test_the_linkstyle_addresses_exactly_the_thick_edges(mermaid):
-    """linkStyle addresses edges by their position in the file, so an index off by"""
+    """linkStyle addresses edges by their position in the file, so an index off by
+    one restyles the wrong arrow and nothing fails. The indices must be exactly
+    the positions of the "==>" edges, counted in file order.
+    """
 
     order = [
         (match.group(1), match.group(4))
@@ -689,7 +721,13 @@ def test_the_linkstyle_addresses_exactly_the_thick_edges(mermaid):
 
 
 def test_emphasis_index_reads_the_hops_and_not_the_exported_name():
-    """WHY THE SHORTCUT IS REFUSED."""
+    """WHY THE SHORTCUT IS REFUSED.
+
+    The exported path name is the hops joined with HOP_ARROW, and splitting it
+    back on " -> " is the obvious way to recover them. That breaks as soon as an
+    id contains the arrow, as "A -> B" does here, so emphasis_index() reads
+    path["hops"] instead.
+    """
 
     index = emphasis_index(HOSTILE_PATHS)
 
@@ -712,7 +750,10 @@ def test_emphasis_index_reads_the_hops_and_not_the_exported_name():
 
 
 def test_no_paths_means_no_emphasis_and_a_file_that_still_renders(real_graph):
-    """A zero-path account is a legitimate result, and the diagram of it has to"""
+    """A zero-path account is a legitimate result, and the diagram of it has to
+    still be a valid file: every node and edge drawn plainly, no linkStyle line,
+    and a legend that says no route survived.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -749,7 +790,12 @@ def test_no_paths_means_no_emphasis_and_a_file_that_still_renders(real_graph):
 # -----------------------------
 
 def test_a_label_containing_the_hop_arrow_survives_both_formats():
-    """THE TRAP THE FORMATS INVITE, AND IT IS LIVE IN THE REAL DATA."""
+    """THE TRAP THE FORMATS INVITE, AND IT IS LIVE IN THE REAL DATA.
+
+    Every exported path is named with its hops joined by " -> ", the edge syntax
+    of both formats. A resource id carrying that arrow must stay inside its label:
+    four nodes and one edge go in, and four nodes and one edge come out.
+    """
 
     mermaid = render_mermaid(HOSTILE_GRAPH, HOSTILE_PATHS)
     dot = render_dot(HOSTILE_GRAPH, HOSTILE_PATHS)
@@ -766,10 +812,12 @@ def test_a_label_containing_the_hop_arrow_survives_both_formats():
     tokens = node_tokens(HOSTILE_GRAPH)
 
     # The id is in a label and nowhere else. In Mermaid the ">" is additionally
+    # escaped as #gt;, while DOT keeps it verbatim inside the quoted string.
     assert "A -#gt; B" in mermaid_nodes(mermaid)[tokens["A -> B"]][1]
     assert "A -> B" in dot_nodes(dot)[tokens["A -> B"]][0]
 
     # and the arrow never appears outside a label in the Mermaid source, which
+    # is where Mermaid would read it as an edge
     for line in mermaid.split("\n"):
 
         if MERMAID_NODE.match(line):
@@ -777,7 +825,10 @@ def test_a_label_containing_the_hop_arrow_survives_both_formats():
 
 
 def test_a_label_containing_a_double_quote_is_escaped_in_both_formats():
-    """The escape the two grammars spell differently: Mermaid takes an HTML entity,"""
+    """The escape the two grammars spell differently: Mermaid takes an HTML entity,
+    #quot;, and DOT takes a backslash. Either spelling in the other format would
+    end the label early.
+    """
 
     mermaid = render_mermaid(HOSTILE_GRAPH, HOSTILE_PATHS)
     dot = render_dot(HOSTILE_GRAPH, HOSTILE_PATHS)
@@ -798,7 +849,10 @@ def test_a_label_containing_a_double_quote_is_escaped_in_both_formats():
 
 
 def test_a_hash_in_a_label_cannot_forge_a_mermaid_entity():
-    """"#" is what introduces Mermaid's entity escapes, so it is escaped first and"""
+    """"#" is what introduces Mermaid's entity escapes, so it is escaped first and
+    a "#" already in a label becomes #35; rather than starting an entity. Escaping
+    it last would turn the #quot; from the quote escape into #35;quot;.
+    """
 
     mermaid = render_mermaid(HOSTILE_GRAPH, HOSTILE_PATHS)
 
@@ -811,7 +865,10 @@ def test_a_hash_in_a_label_cannot_forge_a_mermaid_entity():
 
 
 def test_every_label_in_the_real_renders_is_quoted(mermaid, dot):
-    """Not "the ones that needed it". Every resource type in the shipped dataset"""
+    """Not "the ones that needed it". Every resource type in the shipped dataset
+    contains "::", so a rule deciding which labels need quotes would have to get
+    every one of them right. Quoting every label leaves nothing to decide.
+    """
 
     assert mermaid_nodes(mermaid)
     assert dot_nodes(dot)
@@ -829,7 +886,10 @@ def test_every_label_in_the_real_renders_is_quoted(mermaid, dot):
 
 
 def test_two_ids_deriving_one_identifier_do_not_collide():
-    """"A-B" and "A.B" both reduce to n_A_B. The collision is resolved by appending"""
+    """"A-B" and "A.B" both reduce to n_A_B. The collision is resolved by appending
+    a counter from 2 in node order, so the second becomes n_A_B_2 and each
+    resource keeps its own node.
+    """
 
     tokens = node_tokens(HOSTILE_GRAPH)
 
@@ -848,7 +908,10 @@ def test_two_ids_deriving_one_identifier_do_not_collide():
 
 
 def test_an_identifier_can_never_be_a_bare_mermaid_keyword():
-    """"end" and "graph" are Mermaid keywords, and a node called either would"""
+    """"end" and "graph" are Mermaid keywords, and a node called either would
+    break the parse. The fixed "n_" prefix means no identifier is ever a bare
+    keyword, whatever the resource is called.
+    """
 
     for hostile in ["end", "graph", "subgraph", "class", "flowchart"]:
         assert safe_token(hostile) == "n_" + hostile
@@ -892,7 +955,10 @@ def test_the_way_in_is_encoded_as_a_shape(mermaid, dot, real_graph):
 
 
 def test_the_role_is_also_written_in_words(mermaid, dot, real_graph):
-    """Shape and colour both fail on a monochrome print and on a projector with poor"""
+    """Shape and colour both fail on a monochrome print and on a projector with poor
+    contrast, so a way in also says "[entry]" in its label, and a node that is not
+    one carries no role at all.
+    """
 
     artifact = real_graph.to_dict()
     tokens = node_tokens(artifact)
@@ -912,7 +978,11 @@ def test_the_role_is_also_written_in_words(mermaid, dot, real_graph):
 
 
 def test_the_fill_is_the_worst_severity_on_the_resource(mermaid, dot, real_graph):
-    """Driven by max_severity, which the JSON artifact carries because a renderer"""
+    """Driven by max_severity, which the JSON artifact carries because a renderer
+    cannot derive it without knowing the severity scale path_finder owns. Each
+    node's Mermaid class and DOT fill and stroke are the SEVERITY_STYLES entry for
+    its style_key().
+    """
 
     artifact = real_graph.to_dict()
     tokens = node_tokens(artifact)
@@ -933,7 +1003,10 @@ def test_the_fill_is_the_worst_severity_on_the_resource(mermaid, dot, real_graph
 
 
 def test_every_node_gets_exactly_one_severity_class(mermaid, real_graph):
-    """No node may fall through to a renderer default, because a default is a colour"""
+    """No node may fall through to a renderer default, because a default is a colour
+    the reader would take as a severity. Every node gets exactly one class, and it
+    names a key in SEVERITY_STYLES.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -946,7 +1019,10 @@ def test_every_node_gets_exactly_one_severity_class(mermaid, real_graph):
 
 
 def test_a_clean_node_and_an_unknown_severity_are_not_the_same_colour():
-    """"nothing is wrong with this resource" and "something is wrong and nobody has"""
+    """"nothing is wrong with this resource" and "something is wrong and nobody has
+    a colour for it" must not look alike: None is "clean", any severity outside
+    the table is "unknown", and every key has its own fill.
+    """
 
     assert style_key(None) == "clean"
     assert style_key("catastrophic") == "unknown"
@@ -967,14 +1043,22 @@ def test_a_clean_node_and_an_unknown_severity_are_not_the_same_colour():
 
 
 def test_the_severity_table_is_keyed_lowercase():
-    """THE CONTRACT. data/security_rules.yaml writes `severity: high`, and an"""
+    """THE CONTRACT.
+
+    Severities are lowercase (SEVERITY_BY_SEMANTIC in
+    security_state_graph/semantics.py), and an uppercase key here would never be
+    found: style_key() lowercases whatever severity it is given
+    before looking it up.
+    """
 
     for key in SEVERITY_STYLES:
         assert key == key.lower()
 
 
 def test_a_clean_node_says_so_rather_than_leaving_a_gap(mermaid, real_graph):
-    """An empty line where the severity goes reads as a rendering bug, so the label"""
+    """An empty line where the severity goes reads as a rendering bug, so the label
+    of a resource with no findings says "no findings" there instead.
+    """
 
     tokens = node_tokens(real_graph.to_dict())
 
@@ -987,7 +1071,11 @@ def test_a_clean_node_says_so_rather_than_leaving_a_gap(mermaid, real_graph):
 # -----------------------------
 
 def test_the_gate_dropped_edge_is_not_drawn(gate_dropped_infra):
-    """The arm the shipped dataset never exercises. GateLambda names"""
+    """The arm the shipped dataset never exercises. GateLambda names
+    GateSecurityGroup, but a Lambda is not in INBOUND_REACHABLE_TYPES, so the
+    network_control edge is dropped rather than reversed and neither direction may
+    be drawn. The group itself is still a node.
+    """
 
     state_graph = SecurityStateGraph(gate_dropped_infra, [])
 
@@ -1020,7 +1108,10 @@ def test_the_gate_dropped_edge_is_not_drawn(gate_dropped_infra):
 # -----------------------------
 
 def test_the_edge_label_names_the_category_and_its_notes():
-    """The label builder on its own: category alone when there is nothing to add,"""
+    """The label builder on its own: category alone when there is nothing to add,
+    otherwise "reversed" and the AP ids in parentheses, joined by "; " when there
+    are both.
+    """
 
     plain = {"category": "identity", "reversed": False}
 
@@ -1056,7 +1147,10 @@ def test_every_drawn_edge_is_labelled_with_its_category(
 # -----------------------------
 
 def test_both_renders_are_deterministic(real_graph, real_paths):
-    """Otherwise the golden files below are flakes rather than assertions. Nothing"""
+    """Otherwise the golden files below are flakes rather than assertions. Nothing
+    in a render may vary between runs: one dictionary renders the same text twice,
+    and a graph rebuilt from disk renders it again.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -1082,7 +1176,10 @@ def test_reordering_the_input_does_not_change_the_renders(
     real_graph,
     real_paths
 ):
-    """The renders inherit their ordering from to_dict(), which is sorted precisely"""
+    """The renders inherit their ordering from to_dict(), which is sorted precisely
+    so the order of resources in the input file cannot leak into the output.
+    Reversing the input must leave both renders unchanged.
+    """
 
     reordered = tmp_path / "reversed.json"
     reordered.write_text(
@@ -1104,23 +1201,29 @@ def test_reordering_the_input_does_not_change_the_renders(
 
 
 def test_the_mermaid_render_matches_the_golden_file(mermaid):
-    """The whole file, byte for byte. Every other test here asserts one property;"""
+    """The whole file, byte for byte. Every other test here asserts one property;
+    this one catches any change none of them anticipated, in the legend, the
+    styles or the ordering.
+    """
 
     assert mermaid == GOLDEN_MERMAID.read_text(encoding="utf-8"), (
         "the Mermaid render changed — read the diff, then regenerate the golden "
-        "file (see the docstring at the top of this module)"
+        "file (see 'If you break something' in DEVELOPERS.md)"
     )
 
 
 def test_the_dot_render_matches_the_golden_file(dot):
     assert dot == GOLDEN_DOT.read_text(encoding="utf-8"), (
         "the DOT render changed — read the diff, then regenerate the golden "
-        "file (see the docstring at the top of this module)"
+        "file (see 'If you break something' in DEVELOPERS.md)"
     )
 
 
 def test_the_golden_files_are_themselves_well_formed():
-    """The goldens are checked in, so a bad regeneration would be committed and then"""
+    """The goldens are checked in, so a bad regeneration would be committed and then
+    every later render would be compared against it. They must pass the same
+    structural checks as a fresh render.
+    """
 
     assert mermaid_problems(GOLDEN_MERMAID.read_text(encoding="utf-8")) == []
     assert dot_problems(GOLDEN_DOT.read_text(encoding="utf-8")) == []
@@ -1135,7 +1238,10 @@ def test_write_mermaid_and_write_dot_write_what_they_rendered(
     mermaid,
     dot
 ):
-    """The file is re-read rather than trusted: the artifact is the file, not the"""
+    """The file is re-read rather than trusted: the artifact is the file, not the
+    string. What lands on disk, in a directory that did not exist yet, must equal
+    the render exactly, and each writer returns the path it wrote.
+    """
 
     mermaid_target = tmp_path / "renders" / "graph.mmd"
     dot_target = tmp_path / "renders" / "graph.dot"
@@ -1170,7 +1276,10 @@ def test_write_renders_writes_both_and_overwrites(tmp_path, real_graph, real_pat
 
 
 def test_the_default_render_paths_land_in_output():
-    """The constants, not a run. Writing relative to the working directory is the"""
+    """The constants, not a run. Writing relative to the working directory is the
+    mistake this guards against: both default paths are absolute and under the
+    repository's output/, beside the JSON artifacts, wherever the command runs.
+    """
 
     for path in [MERMAID_PATH, DOT_PATH]:
 

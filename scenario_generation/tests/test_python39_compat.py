@@ -1,4 +1,4 @@
-"""test_python39_compat.py"""
+"""Tests that every module imports on Python 3.9 without the ML stack installed."""
 
 import ast
 import subprocess
@@ -50,7 +50,11 @@ def test_shared_modules_import_without_the_ml_stack():
 
 
 def test_every_non_notebook_module_imports_with_no_ml_stack():
-    """THE SCOPE, DERIVED RATHER THAN LISTED."""
+    """THE SCOPE, DERIVED RATHER THAN LISTED.
+
+    Every file scanned_python_files() finds is probed, so a new module is covered
+    the moment it exists instead of when someone remembers to add it here.
+    """
     probed = []
     offenders = []
 

@@ -110,7 +110,9 @@ def finding(resource_id, semantic, severity, rule_id=None, state=None):
 
 
 def lambda_function(resource_id, security_group_id, role_id):
-    """A Lambda function in a VPC: it names a security group the way a real"""
+    """A Lambda function in a VPC: it names a security group the way a real
+    instance does, but a function does not listen, so the group is no way in.
+    """
 
     return {
         "id": resource_id,
@@ -158,7 +160,9 @@ def security_group(resource_id):
 
 
 def instance(resource_id, security_group_id, profile_id):
-    """An EC2 instance with a public address, in `security_group_id`, launched with"""
+    """An EC2 instance with a public address, in `security_group_id`, launched with
+    `profile_id` as its instance profile.
+    """
 
     return {
         "id": resource_id,
@@ -198,6 +202,8 @@ def hop_lists(paths):
 # -----------------------------
 
 # The chain phases 1 and 2 exist to create: an attacker knocks on the open port,
+# lands on the public instance, takes the role its instance profile hands over,
+# and uses that role's wildcard grant to read the bucket.
 KNOWN_PATH = [
     "OpenSecurityGroup",
     "PublicEC2Instance",
@@ -259,6 +265,7 @@ CYCLE_FINDINGS = [
 
 
 # Two routes out of one entry, carrying the same two findings over different
+# lengths: the deep one passes through CleanRole, which carries nothing.
 LENGTH_RESOURCES = [
     role("LengthEntry", ["ShortRole", "CleanRole"]),
     role("ShortRole", ["ShortBucket"]),
@@ -334,7 +341,9 @@ def test_entry_points_come_from_rule_metadata(real_graph):
 
 
 def test_targets_are_the_data_types_and_need_no_finding(real_graph):
-    """Targets are selected by resource type, so a hardened database is still a"""
+    """Targets are selected by resource type, so a hardened database is still a
+    target: what makes a path is the route to it, not a finding on it.
+    """
 
     targets = data_targets(real_graph)
 
@@ -352,7 +361,12 @@ def test_a_target_with_no_finding_is_still_a_target(cycle_graph):
 # -----------------------------
 
 def test_the_known_multi_hop_path_is_found_with_its_exact_hops(real_paths):
-    """THE HEADLINE ASSERTION."""
+    """THE HEADLINE ASSERTION.
+
+    The chain the shipped dataset was built to contain is found hop for hop, from
+    the open security group to the public bucket, with its band and every
+    finding along it in order.
+    """
 
     assert KNOWN_PATH in hop_lists(real_paths)
 
@@ -456,7 +470,10 @@ def test_every_real_path_starts_at_an_entry_and_ends_at_a_target(
 
 
 def test_the_search_reads_the_traversal_view_not_the_stored_edges(real_paths):
-    """Stored, the edge reads PublicEC2Instance -> OpenSecurityGroup, so a search"""
+    """Stored, the edge reads PublicEC2Instance -> OpenSecurityGroup, so a search
+    over the stored edges could never leave the group. The traversal view turns
+    it round, and every path out of the group goes into the instance.
+    """
 
     from_group = [
         hops
@@ -485,7 +502,9 @@ def test_build_attack_paths_runs_end_to_end_and_writes_nothing(
 # -----------------------------
 
 def test_max_depth_is_respected(chain_graph):
-    """A nine-hop chain is unreachable at three hops and reachable at nine. The"""
+    """A nine-hop chain is unreachable at three hops and reachable at nine. The
+    bound counts hops, not resources: nine hops is ten ids.
+    """
 
     assert walk_paths(chain_graph, max_depth=3, objectives=data_theft_only()) == []
     assert find_attack_paths(chain_graph, max_depth=3, objectives=data_theft_only()) == []
@@ -499,7 +518,10 @@ def test_max_depth_is_respected(chain_graph):
 # -----------------------------
 
 def test_a_cycle_terminates_and_no_path_repeats_a_node(cycle_graph):
-    """CycleA -> CycleB -> CycleC -> CycleA is a loop the search has to leave. The"""
+    """CycleA -> CycleB -> CycleC -> CycleA is a loop the search has to leave. The
+    only path is the one that leaves it for the bucket, and no node appears in it
+    twice.
+    """
 
     paths = find_attack_paths(cycle_graph, objectives=data_theft_only())
 
@@ -512,7 +534,10 @@ def test_a_cycle_terminates_and_no_path_repeats_a_node(cycle_graph):
 
 
 def test_a_cycle_with_no_way_out_yields_nothing_rather_than_looping():
-    """The same loop with the bucket removed. A search that revisited nodes would"""
+    """The same loop with the bucket removed. A search that revisited nodes would
+    never finish here; this one runs out of unvisited neighbours and returns
+    nothing.
+    """
 
     state_graph = graph_of(
         [
@@ -533,7 +558,9 @@ def test_a_cycle_with_no_way_out_yields_nothing_rather_than_looping():
 # -----------------------------
 
 def test_no_entry_points_gives_an_empty_list_not_a_crash():
-    """A graph whose only finding is a privilege one has nowhere to start. That is"""
+    """A graph whose only finding is a privilege one has nowhere to start. That is
+    an empty result, not an error.
+    """
 
     state_graph = graph_of(
         [
@@ -551,7 +578,9 @@ def test_no_entry_points_gives_an_empty_list_not_a_crash():
 
 
 def test_a_disconnected_target_is_never_reached():
-    """LonelyBucket is in the account and nothing reaches it, so it must not appear"""
+    """LonelyBucket is in the account and nothing reaches it, so it must not appear
+    in any path, even though it is a target and carries a finding of its own.
+    """
 
     state_graph = graph_of(
         [
@@ -602,7 +631,13 @@ def test_an_entry_that_is_itself_a_target_is_not_a_zero_hop_path():
 # -----------------------------
 
 def test_a_path_with_no_privilege_hop_is_rejected():
-    """THE POLICY CLAUSE THAT DOES THE WORK."""
+    """THE POLICY CLAUSE THAT DOES THE WORK.
+
+    A route the search reaches is not an attack path until an interior hop hands
+    the attacker authority. Without it every route from an exposed entry to a
+    data store would be reported; one privilege finding on the middle hop is
+    enough to admit this one.
+    """
 
     resources = [
         role("NoPrivEntry", ["NoPrivRole"]),
@@ -637,7 +672,9 @@ def test_a_path_with_no_privilege_hop_is_rejected():
 
 
 def test_a_clean_intermediate_hop_is_allowed(length_graph):
-    """CleanRole carries no findings and is still a legitimate step. The cost of"""
+    """CleanRole carries no findings and is still a legitimate step. The cost of
+    passing through it is one more hop of damping in the score, not rejection.
+    """
 
     assert length_graph.states_of("CleanRole") == []
 
@@ -648,7 +685,10 @@ def test_a_clean_intermediate_hop_is_allowed(length_graph):
 
 
 def test_an_entry_carrying_no_state_is_rejected(length_graph):
-    """Clause 1, asserted directly. entry_points() already guarantees it, but"""
+    """Clause 1, asserted directly. entry_points() already guarantees it, but
+    is_exploitable() also judges routes that did not come from the search, so it
+    has to refuse an entry with no finding on its own.
+    """
 
     assert length_graph.states_of("CleanRole") == []
 
@@ -661,7 +701,12 @@ def test_an_entry_carrying_no_state_is_rejected(length_graph):
 # -----------------------------
 
 def test_severity_lookup_is_case_insensitive_and_not_the_fallback():
-    """THE SILENT FAILURE GUARD."""
+    """THE SILENT FAILURE GUARD.
+
+    A label that misses the table falls back to DEFAULT_SEVERITY_WEIGHT without
+    any error, so a casing mismatch with the YAML would quietly flatten every
+    score. Every real label, in any case, has to hit its own weight.
+    """
 
     assert severity_weight("high") == SEVERITY_WEIGHTS["high"]
     assert severity_weight("HIGH") == SEVERITY_WEIGHTS["high"]
@@ -680,7 +725,9 @@ def test_severity_lookup_is_case_insensitive_and_not_the_fallback():
 
 
 def test_an_unknown_or_missing_severity_falls_back_below_low():
-    """A finding with a label nobody agreed on still counts, and must never be"""
+    """A finding with a label nobody agreed on still counts, and must never be
+    worth as much as the lowest agreed severity.
+    """
 
     assert severity_weight("catastrophic") == DEFAULT_SEVERITY_WEIGHT
     assert severity_weight(None) == DEFAULT_SEVERITY_WEIGHT
@@ -732,7 +779,10 @@ def test_the_real_path_sums_the_severities_of_every_weakness(real_graph):
 # -----------------------------
 
 def test_with_identical_severities_the_longer_path_scores_lower(length_graph):
-    """Both routes leave the same entry and carry the same two findings — one high,"""
+    """Both routes leave the same entry and carry the same two findings: one high,
+    one critical. The severity totals are equal, so only the length can separate
+    the scores.
+    """
 
     short = ["LengthEntry", "ShortRole", "ShortBucket"]
     deep = ["LengthEntry", "CleanRole", "DeepRole", "DeepBucket"]
@@ -752,7 +802,9 @@ def test_with_identical_severities_the_longer_path_scores_lower(length_graph):
 
 
 def test_damping_is_applied_per_hop_beyond_the_first(length_graph):
-    """The first hop is free — the penalty is for the hops that have to be chained"""
+    """The first hop is free: the penalty is for the hops that have to be chained
+    after getting in. A two-hop route is damped exactly once.
+    """
 
     short = ["LengthEntry", "ShortRole", "ShortBucket"]
 
@@ -767,7 +819,10 @@ def test_damping_is_applied_per_hop_beyond_the_first(length_graph):
 # -----------------------------
 
 def test_public_exposure_is_read_off_the_configuration(real_graph):
-    """Derived from a property the extractor tagged `exposure` carrying a value"""
+    """Derived from a property the extractor tagged `exposure` carrying a value
+    that means reachable from outside (an open CIDR, `internet-facing`, a public
+    ACL, a true flag), not from the findings on the node.
+    """
 
     assert is_public_entry(real_graph, "OpenSecurityGroup") is True
     assert is_public_entry(real_graph, "PublicEC2Instance") is True
@@ -780,7 +835,9 @@ def test_public_exposure_is_read_off_the_configuration(real_graph):
 
 
 def test_an_exposure_property_that_is_switched_off_is_not_public():
-    """PubliclyAccessible: false is the hardened case, and a truth test that only"""
+    """PubliclyAccessible: false is the hardened case, and a truth test that only
+    asked whether an `exposure` property was present would call it public.
+    """
 
     state_graph = graph_of(
         [
@@ -804,7 +861,10 @@ def test_an_exposure_property_that_is_switched_off_is_not_public():
 
 
 def test_a_public_entry_is_boosted(real_graph, length_graph):
-    """The boost is what separates "exposed to the internet" from "exposed wider"""
+    """The boost is what separates "exposed to the internet" from "exposed wider
+    than it should be". An entry with an exposure finding but no public
+    configuration gets the damped sum and nothing more.
+    """
 
     short = ["LengthEntry", "ShortRole", "ShortBucket"]
 
@@ -845,7 +905,9 @@ def test_results_are_sorted_descending(real_paths, length_graph):
 
 
 def test_equal_scores_are_ordered_deterministically():
-    """Two mirror-image routes with identical states score identically, and the"""
+    """Two mirror-image routes with identical states score identically, and the
+    tie is broken by the hops themselves, not by the order the search found them.
+    """
 
     state_graph = graph_of(
         [
@@ -878,7 +940,9 @@ def test_equal_scores_are_ordered_deterministically():
 # -----------------------------
 
 def test_attack_level_thresholds_on_both_sides_of_every_cutoff():
-    """Both cutoffs, three points each: exactly on it, just above, just below. The"""
+    """Both cutoffs, three points each: exactly on it, just above, just below. The
+    cutoff itself belongs to the higher band.
+    """
 
     # -----------------------------
 
@@ -904,7 +968,9 @@ def test_attack_level_thresholds_on_both_sides_of_every_cutoff():
 
 
 def test_a_low_severity_path_lands_in_the_medium_band():
-    """The bottom band is a genuine path carried by weak findings, not a rejected"""
+    """The bottom band is a genuine path carried by weak findings, not a rejected
+    one: a MEDIUM path is still reported.
+    """
 
     state_graph = graph_of(
         [
@@ -942,7 +1008,7 @@ def test_a_described_path_carries_everything_the_export_needs(real_graph):
         ATTACK_LEVEL_MEDIUM
     ]
 
-    # The states are the findings of the hops that have one, in path order. Not
+    # The states are the findings of the hops that have one, in path order.
     # One entry per FINDING, in hop order — not one per hop. PublicEC2Instance
     # carries two (EC2_PUBLIC_IP and EC2_IMDSV1_ENABLED), so it appears twice, and
     # a one-per-hop expectation would have quietly hidden the second.
@@ -985,7 +1051,12 @@ def test_describing_a_path_does_not_mutate_the_graph(real_graph):
 # -----------------------------
 
 def test_a_privilege_finding_on_the_entry_is_not_an_escalation():
-    """CLAUSE 2 IS POSITIONAL, AND THIS IS THE CASE THAT PROVES IT."""
+    """CLAUSE 2 IS POSITIONAL, AND THIS IS THE CASE THAT PROVES IT.
+
+    The entry carries a privilege finding and the route still fails: authority
+    the attacker holds at the way in is not authority gained along the way. Move
+    the same finding to an interior hop and the route is admitted.
+    """
 
     resources = [
         role("EntryRole", ["EntryBucket"]),
@@ -1030,7 +1101,10 @@ def test_a_privilege_finding_on_the_entry_is_not_an_escalation():
 
 
 def test_a_privilege_finding_on_the_target_is_not_an_escalation():
-    """The other end of the same clause. Authority discovered *at* the data cannot"""
+    """The other end of the same clause. Authority discovered *at* the data cannot
+    have been used to reach it, so a privilege finding on the target does not
+    count either.
+    """
 
     state_graph = graph_of(
         [
@@ -1055,7 +1129,10 @@ def test_the_shipped_paths_carry_their_escalation_on_an_interior_hop(
     real_graph,
     real_paths
 ):
-    """The policy, observed on the shipped dataset rather than on a fixture: every"""
+    """The policy, observed on the shipped dataset rather than on a fixture: every
+    reported path has an interior hop, and one of them carries a privilege
+    finding.
+    """
 
     assert real_paths
 
@@ -1178,7 +1255,9 @@ def test_two_findings_of_one_weakness_on_one_node_count_once():
 
 
 def test_two_different_weaknesses_on_one_node_both_count():
-    """THE DISCRIMINATING HALF. The dedupe is per weakness, not per node: a node"""
+    """THE DISCRIMINATING HALF. The dedupe is per weakness, not per node: a node
+    carrying two different states counts both, so the second adds its own weight.
+    """
 
     resources = [
         role("BothEntry", ["BothRole"]),
@@ -1221,7 +1300,12 @@ def test_a_redundant_rule_does_not_re_rank_the_shipped_paths(
     rules_path,
     tmp_path
 ):
-    """THE INVARIANT, END TO END, THROUGH THE REAL RULE LOADER."""
+    """THE INVARIANT, END TO END, THROUGH THE REAL RULE LOADER.
+
+    A copy of a shipped rule under a new rule id fires on OpenSecurityGroup and
+    changes neither the paths found nor any score, because the state it reports
+    is one already counted.
+    """
 
     with open(rules_path, "r", encoding="utf-8") as f:
         rules = yaml.safe_load(f)
@@ -1274,7 +1358,13 @@ def test_a_redundant_rule_does_not_re_rank_the_shipped_paths(
 # -----------------------------
 
 def test_an_open_group_on_a_lambda_function_is_not_a_way_in():
-    """THE FALSE FIRST HOP THE TYPE GATE EXISTS TO PREVENT."""
+    """THE FALSE FIRST HOP THE TYPE GATE EXISTS TO PREVENT.
+
+    A Lambda names its security group the same way an instance does, so turning
+    every such edge round made an open group a way into a function that accepts
+    no inbound connections. The gate keeps the reversed edge only when the
+    declaring resource can listen, and an instance in the same shape still can.
+    """
 
     state_graph = graph_of(
         [

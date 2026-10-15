@@ -1,6 +1,6 @@
 """Score an attack path, and band the score.
 
-Split out of graph/path_finder.py, which had grown to own objectives, entry
+Split out of attack_path/path_finder.py, which had grown to own objectives, entry
 points, the search itself, per-hop narration, export shaping AND this. Re-tuning a
 threshold and fixing the cycle check are unrelated reasons to open a file.
 

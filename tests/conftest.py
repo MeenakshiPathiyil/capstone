@@ -113,6 +113,7 @@ SAMPLE_RESOURCES = [
 
 
 # A role that reaches one bucket twice: its policy names the bucket in a
+# statement (a "connection" edge) and also grants "*" on "*" (a "capability" edge).
 PARALLEL_EDGE_RESOURCES = [
     {
         "id": "ParallelRole",
@@ -166,6 +167,8 @@ PARALLEL_EDGE_RESOURCES = [
 
 
 # A network_control edge that must NOT be reversed for traversal: a Lambda
+# is not a type inbound traffic arrives at, so its security group edge is stored
+# and left out of the traversal view.
 GATE_DROPPED_RESOURCES = [
     {
         "id": "GateSecurityGroup",
@@ -234,6 +237,7 @@ GATE_DROPPED_RESOURCES = [
             "Policies[0].PolicyDocument.Statement[0].Action": "capability",
 
             # "unknown" on the reference, so the edge is typed by the target's
+            # own type (a bucket gives "connection") rather than thrown away.
             "Policies[0].PolicyDocument.Statement[0].Resource": "unknown"
         }
     },
@@ -275,7 +279,9 @@ def parallel_edge_infra():
 
 @pytest.fixture
 def gate_dropped_infra():
-    """A network_control edge the INBOUND_REACHABLE_TYPES gate must drop, as a"""
+    """A network_control edge the INBOUND_REACHABLE_TYPES gate must drop, as a
+    connected InfraModel.
+    """
 
     return build_infra_from_resources(
         json.loads(json.dumps(GATE_DROPPED_RESOURCES))

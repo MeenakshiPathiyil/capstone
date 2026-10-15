@@ -1,4 +1,4 @@
-"""judge_eval.py"""
+"""Score base and fine-tuned outputs on the held-out inputs with a Gemini judge."""
 
 from __future__ import annotations
 
@@ -70,7 +70,8 @@ def log_section(title: str) -> None:
 
 
 def log_output_preview(label: str, text: str, max_chars: int = 300) -> None:
-    """Print the first max_chars characters of a generated output, so you can see at"""
+    """Print the first max_chars characters of a generated output, so you can see at
+    a glance what the model produced."""
     preview = text[:max_chars].replace("\n", " ").strip()
     if len(text) > max_chars:
         preview += f"... [{len(text)} chars total]"
@@ -384,7 +385,8 @@ def build_rubric_prompt(scenario_text: str) -> str:
 
 
 def judge_scenario(client, scenario_text: str, label: str = "output") -> dict:
-    """Ask Gemini to score one scenario. Logs the raw reply so a formatting problem"""
+    """Ask Gemini to score one scenario. Logs the raw reply so a formatting problem
+    can be diagnosed from the log."""
     log(f"  [gemini] Judging: {label} (scenario length: {len(scenario_text)} chars)")
 
     response, elapsed = gemini_generate_with_retry(

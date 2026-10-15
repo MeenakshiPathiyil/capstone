@@ -90,7 +90,7 @@ class RuleEngine:
 
                     state = rule.get("state")
 
-                    # New format:
+                    # New format: the state is a dict carrying its id.
                     if isinstance(state, dict):
                         state_id = state.get("id")
                     else:
@@ -112,7 +112,7 @@ class RuleEngine:
                         "semantic": rule.get("semantic"),
 
                         # Absent on canonical rules, which do not declare one.
-                        # graph/path_finder derives it from the semantic when it
+                        # security_state_graph/semantics derives it from the semantic when it
                         # is missing. See SEVERITY_BY_SEMANTIC there.
                         "severity": rule.get("severity")
                     })
@@ -129,7 +129,7 @@ class RuleEngine:
         return matches
 
     def evaluate_all(self, resources):
-        """Evaluate every resource against"""
+        """Evaluate every resource against the rules indexed for its type."""
 
         results = []
 
@@ -179,7 +179,7 @@ class RuleEngine:
         return parameters
 
     def _resolve_parameters(self, value, parameters):
-        """Recursively replace:"""
+        """Recursively replace {name} parameter references with their values."""
 
         if isinstance(value, dict):
 

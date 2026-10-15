@@ -35,6 +35,7 @@ RULES_PATH = BASE_DIR / "data" / "security_rules.yaml"
 OUTPUT_PATH = BASE_DIR / "output" / "attack_paths.json"
 
 # GRAPH_JSON_PATH, MERMAID_PATH and DOT_PATH are not restated here the way
+# the three paths above are: each is defined once, by the module that writes it.
 
 
 def count_findings(state_graph):
@@ -120,6 +121,7 @@ def summarize(state_graph, paths, records, output_path, wrote, artifacts=(),
         )
 
     # Stale findings are not an error, but they are the difference between "the
+    # account is clean" and "the findings never reached the graph", so say so.
     if state_graph.orphan_findings:
         print(
             f"Warning: "
@@ -164,7 +166,8 @@ def run_pipeline(
     steps_path=STEPS_PATH,
     min_level=ATTACK_LEVEL_HIGH
 ):
-    """Run every stage and write all four artifacts. Returns"""
+    """Run every stage and write all four artifacts. Returns
+    (state_graph, paths, records)."""
 
     # 1. Build the joined graph. The infra model is built on the way, and saved,
     #    so the connection graph is an artifact of the pipeline rather than
@@ -253,6 +256,7 @@ def run_pipeline(
 if __name__ == "__main__":
 
     # A run that found nothing exits non-zero. The command line is where this
+    # is checked, so a shell or CI step can tell that no paths were produced.
     _, produced, _ = run_pipeline()
 
     if not produced:

@@ -1,4 +1,4 @@
-"""Tests for data/attack_transitions.yaml and graph/transitions.py.
+"""Tests for data/attack_transitions.yaml and security_state_graph/transitions.py.
 
 The attack graph layer's ruleset, and the engine that applies it. What these
 tests defend is the same thing test_security_rules.py defends for the other
@@ -134,7 +134,7 @@ def test_no_rule_carries_an_unknown_key(rules):
 def test_every_applies_to_key_is_recognised(rules):
     """THE SILENT-WILDCARD GUARD.
 
-    graph/transitions.matches ignores keys it does not know, so a misspelled
+    security_state_graph.transitions.matches ignores keys it does not know, so a misspelled
     constraint does not narrow anything and the rule fires on every edge of its
     category. That is the failure mode most likely to go unnoticed, because the
     output grows rather than shrinks.

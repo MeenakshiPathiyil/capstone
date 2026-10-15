@@ -1,4 +1,4 @@
-"""test_prompt_generator_prompt.py"""
+"""Tests that prompt_generator.py builds the trained prompt from real attack paths."""
 
 import ast
 import json
@@ -88,7 +88,9 @@ def _assigned_names(source):
 
 
 def test_the_dummy_attack_path_is_gone_from_the_imported_module():
-    """Every run used to generate four scenarios about the same invented campaign,"""
+    """Every run used to generate four scenarios about the same invented campaign,
+    because a hardcoded dummy path stood in for the real export.
+    """
     assert not hasattr(prompt_generator, "DUMMY_ATTACK_PATH")
     assert prompt_generator.ATTACK_PATH_KEYS
 
@@ -101,7 +103,11 @@ def test_the_dummy_attack_path_is_gone_from_the_imported_module():
 
 @pytest.mark.parametrize("path", scanned_python_files(), ids=lambda p: p.name)
 def test_no_module_carries_a_hardcoded_attack_path(path):
-    """THE SCOPE THIS TEST USED TO HAVE, WIDENED."""
+    """THE SCOPE THIS TEST USED TO HAVE, WIDENED.
+
+    Not just prompt_generator.py: no scanned module may carry a hardcoded attack
+    path.
+    """
     source = path.read_text(encoding="utf-8")
 
     assert not [
@@ -115,7 +121,9 @@ def test_no_module_carries_a_hardcoded_attack_path(path):
 # ── The cross-repository key set ──────────────────────────────────────────────
 
 def test_attack_path_keys_are_exactly_what_the_prompt_reads(attack_path):
-    """ATTACK_PATH_KEYS is what the loader validates; the seven subscripts inside"""
+    """ATTACK_PATH_KEYS is what the loader validates; the seven subscripts inside
+    build_input_block are what the prompt reads. The two must be the same set.
+    """
     expected = {
         "source_id",
         "source_name",
@@ -152,7 +160,9 @@ def test_the_real_export_loads(attack_path_records):
 
 
 def test_one_prompt_per_exported_path(prompt_entry, attack_path_records):
-    """The loop is over the real paths now, so N paths produce N distinct prompts —"""
+    """The loop is over the real paths now, so N paths produce N distinct prompts,
+    each naming its own source_id.
+    """
     prompts = [
         prompt_generator.format_model_input(prompt_entry, record)
         for record in prompt_generator.load_attack_paths(ATTACK_PATHS_FIXTURE)
@@ -166,7 +176,9 @@ def test_one_prompt_per_exported_path(prompt_entry, attack_path_records):
 
 
 def test_every_prompt_in_the_cross_product_is_canonical(attack_path_records):
-    """Every prompt the script can emit — each library prompt against each exported"""
+    """Every prompt the script can emit, each library prompt against each exported
+    path, is the canonical trained-format prompt.
+    """
     for record in attack_path_records:
         for entry in prompt_generator.STRUCTURED_PROMPTS:
             assert (prompt_generator.format_model_input(entry, record)
@@ -174,7 +186,9 @@ def test_every_prompt_in_the_cross_product_is_canonical(attack_path_records):
 
 
 def test_a_missing_file_is_a_clear_error(tmp_path):
-    """The most likely failure in practice: the export has not been copied over"""
+    """The most likely failure in practice: the export has not been copied over
+    from the graph pipeline. The error names the path and how to produce it.
+    """
     missing = tmp_path / "attack_paths.json"
 
     with pytest.raises(FileNotFoundError) as excinfo:
@@ -186,7 +200,9 @@ def test_a_missing_file_is_a_clear_error(tmp_path):
 
 
 def test_a_missing_key_is_reported_before_the_model_loads(tmp_path):
-    """A drifted export must fail with the name of the missing key, not with a"""
+    """A drifted export must fail with the name of the missing key, not with a
+    KeyError halfway through generation.
+    """
     drifted = tmp_path / "attack_paths.json"
     record = {key: "x" for key in prompt_generator.ATTACK_PATH_KEYS}
     del record["techniques"]

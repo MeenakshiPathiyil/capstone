@@ -1,4 +1,4 @@
-"""test_score_parsing.py"""
+"""Tests for parsing the judge's score replies, well-formed and malformed."""
 
 import judge_eval
 

@@ -142,7 +142,12 @@ def test_action_matches(pattern, required, expected):
 
 
 def test_a_service_wildcard_does_not_leak_across_services():
-    """THE OVER-DETECTION THIS GUARD EXISTS FOR."""
+    """THE OVER-DETECTION THIS GUARD EXISTS FOR.
+
+    A service wildcard covers every action in its own service and nothing in
+    another. Letting it leak would credit a principal with escalation methods
+    whose actions it does not hold.
+    """
 
     assert not action_matches("ec2:*", "lambda:CreateFunction")
     assert not action_matches("lambda:*", "ec2:RunInstances")

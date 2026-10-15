@@ -9,6 +9,7 @@ from attack_path.exporter import HOP_ARROW, source_id_for
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Where the two renders land. Siblings of output/security_state_graph.json on
+# disk, so every artifact of a run sits in the same folder.
 MERMAID_PATH = BASE_DIR / "output" / "security_state_graph.mmd"
 DOT_PATH = BASE_DIR / "output" / "security_state_graph.dot"
 
@@ -23,6 +24,7 @@ DOT_COMMENT = "// "
 INDENT = "    "
 
 # The identifier prefix. Fixed, and not empty: "end" is a Mermaid keyword and
+# a resource id may be spelled that way, so no bare id is used as a token.
 NODE_TOKEN_PREFIX = "n_"
 
 # Anything that is not a bare identifier character becomes one underscore.
@@ -32,6 +34,7 @@ NODE_TOKEN_UNSAFE = re.compile(r"[^A-Za-z0-9_]")
 NODE_TOKEN_COLLISION_START = 2
 
 # How the lines of one node label are separated in each format. Mermaid labels
+# take an HTML line break, DOT labels an escaped newline.
 MERMAID_LINE_BREAK = "<br/>"
 DOT_LINE_BREAK = "\\n"
 
@@ -82,6 +85,7 @@ SEVERITY_STYLES = {
 }
 
 # The two keys in SEVERITY_STYLES that no rule may claim. A rule writing
+# `severity: clean` is drawn as unknown, not as a resource with no findings.
 PSEUDO_SEVERITIES = ["clean", "unknown"]
 
 CLEAN_SEVERITY = "clean"
@@ -109,6 +113,7 @@ MERMAID_EDGE = "-->"
 MERMAID_EMPHASIS_EDGE = "==>"
 
 # How an edge's label is assembled: the category, then the notes about it in
+# parentheses: "reversed", then the ids of the ranked paths that use it.
 EDGE_NOTE_JOINER = "; "
 EDGE_PATH_JOINER = ", "
 REVERSED_NOTE = "reversed"
@@ -464,6 +469,7 @@ def render_mermaid(graph, paths):
     # -----------------------------
 
     # linkStyle addresses edges by their position in this block, so the indices
+    # of the emphasised ones are collected while the lines are written.
     edge_lines = []
     emphasised_indices = []
 
@@ -517,6 +523,7 @@ def render_mermaid(graph, paths):
     # -----------------------------
 
     # Omitted entirely when nothing is emphasised: `linkStyle` with an empty
+    # index list is not valid Mermaid.
     link_style_lines = []
 
     if emphasised_indices:

@@ -149,7 +149,7 @@ def output_target(child_template, output_name):
 
     Only a plain `!Ref` is resolved. An output built with Fn::Join or Fn::Sub is
     returned as None rather than approximated — a wrong edge is worse than a
-    missing one, and graph/connection_builder is where the honest-fallback
+    missing one, and engine/connection_builder is where the honest-fallback
     argument for that is written down.
     """
 

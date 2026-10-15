@@ -69,11 +69,11 @@ REQUIRED_SOURCE_IDS = CANONICAL_SOURCE_IDS | OUR_SOURCE_IDS
 # fixture tests because there is no resource to write a fixture for.
 UNTESTABLE_RESOURCE_TYPES = {"account"}
 
-# Lowercase on purpose: graph/path_finder.py indexes a lowercase weight table.
+# Lowercase on purpose: security_state_graph/semantics.py indexes a lowercase weight table.
 ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
 
 # The seven the parser's semantic categorisation emits, plus `privilege`, which is
-# ours. See the note at NON_PATH_SEMANTICS in graph/path_finder.py.
+# ours. See the note at NON_PATH_SEMANTICS in security_state_graph/semantics.py.
 ALLOWED_SEMANTICS = {
     "network_control",
     "exposure",
@@ -428,6 +428,7 @@ HARDENED_RESOURCES = {
     },
 
     # Wildcards everywhere except where they matter: the action is scoped to a
+    # service, the Allow names one bucket, and the only "*" resource is a Deny.
     "IAM_WILDCARD_PERMISSIONS": {
         "id": "HardenedRole",
         "type": "AWS::IAM::Role",
@@ -853,7 +854,9 @@ def test_rule_ignores_the_hardened_version(rules_path, fixture_key):
 
 @pytest.mark.parametrize("fixture_key", FIXTURE_KEYS)
 def test_hardened_resource_produces_no_finding_at_all(rules_path, fixture_key):
-    """Stronger than the test above: no *other* rule on the same resource type may"""
+    """Stronger than the test above: no *other* rule on the same resource type may
+    fire on the hardened resource either.
+    """
 
     assert matched_rule_ids(
         rules_path,
@@ -862,7 +865,10 @@ def test_hardened_resource_produces_no_finding_at_all(rules_path, fixture_key):
 
 
 def test_every_rule_has_both_halves_declared():
-    """Adding a rule to the YAML without adding its pair of fixtures would"""
+    """Adding a rule to the YAML without adding its pair of fixtures would
+    go unnoticed by the parametrized tests, so the three tables are checked to
+    name the same fixtures.
+    """
 
     assert set(VULNERABLE_RESOURCES) == set(FIXTURE_RULE_ID)
     assert set(HARDENED_RESOURCES) == set(FIXTURE_RULE_ID)
@@ -887,7 +893,9 @@ def test_every_testable_rule_has_a_fixture_pair(rules_path):
 
 
 def test_fixture_resource_types_agree_with_their_rule(rules_path):
-    """The engine indexes rules by resource_type, so a fixture typed wrongly would"""
+    """The engine indexes rules by resource_type, so a fixture typed wrongly would
+    never reach its rule, and the hardened half would pass for free.
+    """
 
     for fixture_key, rule_id in FIXTURE_RULE_ID.items():
         resource_type = rule_by_id(rules_path, rule_id)["resource_type"]
@@ -921,7 +929,7 @@ def test_every_rule_declares_the_required_fields(rules_path):
 def test_no_rule_declares_a_severity(rules_path):
     """THE SEVERITY GUARD.
 
-    Severity is derived from the semantic in graph/path_finder, in one table, so
+    Severity is derived from the semantic in security_state_graph/semantics, in one table, so
     that nobody has to defend a number rule by rule. A rule that declares its own
     severity wins over that table (see finding_severity), which is how the
     privilege escalation detector keeps its sharper values — but a *rule* doing it
@@ -984,7 +992,7 @@ def test_every_semantic_is_in_the_allowed_vocabulary(rules_path):
 def test_every_semantic_has_a_path_role(rules_path):
     """THE SILENT-IGNORE GUARD.
 
-    graph/path_finder sorts semantics into ways in, authority gains, and neither.
+    security_state_graph/semantics sorts semantics into ways in, authority gains, and neither.
     A semantic in none of those three is a finding the search reads and silently
     does nothing with, which is how `network_control` came to be reported and
     ignored for a whole commit while being the most important semantic in the
@@ -1091,7 +1099,9 @@ def test_field_order_is_consistent_in_every_rule(rules_path):
 # -----------------------------
 
 def test_attack_techniques_are_well_formed(rules_path):
-    """The exporter emits these verbatim as the "techniques" of an attack path, so"""
+    """The exporter emits these verbatim as the "techniques" of an attack path, so
+    each needs a well-formed id and a trimmed, non-empty name.
+    """
 
     for rule in load_rules(rules_path):
         techniques = rule["attack_techniques"]
@@ -1113,7 +1123,9 @@ def test_attack_technique_ids_are_unique_within_a_rule(rules_path):
 
 
 def test_the_same_technique_id_always_carries_the_same_name(rules_path):
-    """T1190 is shared by four rules. Two spellings of one technique would be"""
+    """T1190 is shared by four rules. Two spellings of one technique would be
+    exported as two different strings for the same thing.
+    """
 
     names = {}
 
@@ -1127,7 +1139,7 @@ def test_the_same_technique_id_always_carries_the_same_name(rules_path):
 # -----------------------------
 
 def test_rules_matching_over_a_list_use_scope(rules_path):
-    """Phase 4 added "scope" and Phase 3 has to opt in. The three rules whose"""
+    """Phase 4 added "scope" and Phase 3 has to opt in."""
 
     def scopes_in(node):
         if isinstance(node, dict):
@@ -1179,7 +1191,9 @@ def test_scoping_the_existing_rule_did_not_lose_the_real_finding(
     rules_path,
     real_resource_dicts
 ):
-    """The opt-in regression check the task asks for: OpenSecurityGroup opens 3389"""
+    """The opt-in regression check the task asks for: OpenSecurityGroup opens 3389
+    to the world on one ingress entry, and the scoped rules must still report it.
+    """
 
     findings = all_findings(rules_path, real_resource_dicts)
 
@@ -1226,7 +1240,10 @@ def test_every_real_resource_a_rule_applies_to_is_covered(
     rules_path,
     real_resource_dicts
 ):
-    """Both halves of rule coverage on the shipped dataset, phrased against the"""
+    """Both halves of rule coverage on the shipped dataset, phrased against the
+    rule set itself: every resource of a type some rule applies to has a finding,
+    and no other resource does.
+    """
 
     # evaluate_findings, not the rule engine alone: privilege escalation
     # findings are part of what the graph joins, and a role that holds
@@ -1286,7 +1303,10 @@ def test_real_dataset_can_supply_both_halves_of_a_path(
     rules_path,
     real_resource_dicts
 ):
-    """The minimum shape an attack path needs: something to enter through and"""
+    """The minimum shape an attack path needs: something to enter through and
+    something with the authority to reach the target. The shipped findings must
+    supply both.
+    """
 
     from security_state_graph.semantics import (
         AUTHORITY_SEMANTICS,
@@ -1302,7 +1322,9 @@ def test_real_dataset_can_supply_both_halves_of_a_path(
 
 
 def test_no_rule_reports_the_hardened_dataset(rules_path):
-    """Every hardened fixture evaluated together — a whole clean account produces"""
+    """Every hardened fixture evaluated together: a whole clean account produces
+    no findings at all.
+    """
 
     findings = all_findings(
         rules_path,
@@ -1340,7 +1362,12 @@ def test_every_scope_path_resolves_to_elements_on_the_shipped_dataset(
     rules_path,
     real_resource_dicts
 ):
-    """THE SILENT-COLLAPSE GUARD FOR SCOPED RULES."""
+    """THE SILENT-COLLAPSE GUARD FOR SCOPED RULES.
+
+    A scope path that resolves to no elements makes its subtree False on every
+    resource, so the rule quietly never fires. Every scope in the rule set must
+    resolve to elements on at least one resource the rule applies to.
+    """
 
     # The shipped dataset plus every vulnerable fixture, because some rules apply
     # to a resource type the 15-resource dataset does not contain — the standalone
@@ -1396,7 +1423,11 @@ def test_every_scope_path_resolves_to_elements_on_the_shipped_dataset(
 # Nothing detected that, because the technique list was prose.
 
 def test_every_rule_technique_is_in_the_iaas_matrix(rules_path):
-    """THE CITATION GUARD."""
+    """THE CITATION GUARD.
+
+    Every technique a rule cites must be in the ATT&CK IaaS matrix, so the model
+    is never fed an id from outside the matrix this project claims to use.
+    """
 
     from engine.attack_catalog import is_known
 

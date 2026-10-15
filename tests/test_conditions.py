@@ -1,4 +1,4 @@
-"""Tests for graph/conditions.py — the fact vocabulary.
+"""Tests for security_state_graph/facts.py — the fact vocabulary.
 
 The conditions themselves live in data/attack_transitions.yaml; this module only
 holds the four fact names and the helpers for testing and accumulating them. It

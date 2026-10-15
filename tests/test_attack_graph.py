@@ -1,4 +1,4 @@
-"""Tests for graph/attack_graph.py — the attack graph layer's artifact.
+"""Tests for security_state_graph/attack_graph.py — the attack graph layer's artifact.
 
 What makes this a different graph from the security state graph, and what these
 tests are here to hold:

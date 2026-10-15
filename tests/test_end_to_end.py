@@ -14,7 +14,8 @@ from security_state_graph.state_graph import GRAPH_FILES
 from runner import graph_runner
 
 
-# The six keys the consumer reads, transcribed from
+# The seven keys the consumer reads, transcribed from ATTACK_PATH_KEYS in
+# scenario_generation/prompt_generator.py.
 CONSUMER_KEYS = [
     "source_id",
     "source_name",
@@ -40,6 +41,7 @@ MINIMUM_FINDINGS = 6
 MINIMUM_PATHS = 1
 
 # A second account, not the one this repository was written against. See
+# test_the_pipeline_finds_a_path_in_a_second_independent_account.
 SECOND_ACCOUNT = Path(__file__).resolve().parent / "fixtures" / "second_account.json"
 
 
@@ -139,7 +141,7 @@ def test_the_pipeline_produces_resources_edges_findings_and_paths(
     tmp_path,
     real_resource_dicts
 ):
-    """The whole phase in one assertion block: 1 edge -> 6, 1 finding -> 7,"""
+    """The whole phase in one assertion block."""
 
     state_graph, paths, records = run(tmp_path)
 
@@ -159,7 +161,10 @@ def test_the_pipeline_produces_resources_edges_findings_and_paths(
 # -----------------------------
 
 def test_the_export_carries_exactly_the_consumer_contract(tmp_path):
-    """Not a subset and not a superset. A missing key is a KeyError inside an"""
+    """Not a subset and not a superset. A missing key is a KeyError inside another
+    repository, where nothing here would see it fail, and an extra key is a field
+    the contract never agreed to.
+    """
 
     _, _, records = run(tmp_path)
 
@@ -175,7 +180,9 @@ def test_the_runner_writes_a_loadable_file_and_nothing_else(
     tmp_path,
     monkeypatch
 ):
-    """Written where it was told, and not into the working directory — the bug"""
+    """Written where it was told, and not into the working directory: the bug
+    this repository already had once.
+    """
 
     keywords = artifacts_in(tmp_path)
 
@@ -197,7 +204,12 @@ def test_the_runner_writes_a_loadable_file_and_nothing_else(
 
 
 def test_one_run_produces_all_four_artifacts(tmp_path):
-    """THE ARTIFACTS EXIST BECAUSE THE ONE COMMAND WRITES THEM."""
+    """THE ARTIFACTS EXIST BECAUSE THE ONE COMMAND WRITES THEM.
+
+    One run_pipeline call writes every artifact, none of them empty, and the
+    renders are checked against the graph written beside them, so the files
+    describe one run rather than several.
+    """
 
     keywords = artifacts_in(tmp_path)
 
@@ -232,7 +244,10 @@ def test_one_run_produces_all_four_artifacts(tmp_path):
 
 
 def test_the_default_artifacts_land_in_output(tmp_path):
-    """The constants, not a run: the shipped output/attack_paths.json is the file"""
+    """The constants, not a run: the shipped output/attack_paths.json is the file
+    the scenario generator reads, so the defaults have to point into output/ and
+    never at the working directory.
+    """
 
     assert graph_runner.OUTPUT_PATH.name == "attack_paths.json"
     assert graph_runner.OUTPUT_PATH.parent.name == "output"
@@ -288,7 +303,7 @@ def test_the_artifacts_without_their_own_golden_test_match_their_golden_files(tm
     produced = dict(keywords["attack_graph_files"])
     produced["steps"] = keywords["steps_path"]
 
-    for name, path in produced.items():
+    for path in produced.values():
         golden = GOLDEN_DIR / ("golden_" + path.name)
         assert path.read_text(encoding="utf-8") == golden.read_text(encoding="utf-8"), (
             "%s changed: read the diff, then copy it over %s" % (path.name, golden.name)
@@ -296,7 +311,10 @@ def test_the_artifacts_without_their_own_golden_test_match_their_golden_files(tm
 
 
 def test_two_runs_produce_the_same_bytes(tmp_path):
-    """Determinism, end to end, for every artifact the runner writes. The ranking"""
+    """Determinism, end to end, for every artifact the runner writes. The ranking
+    is a total order (score, length, hops, objective), so paths with equal scores
+    cannot swap places between runs and take each other's source ids.
+    """
 
     first = artifacts_in(tmp_path / "first")
     second = artifacts_in(tmp_path / "second")
@@ -314,7 +332,13 @@ def test_two_runs_produce_the_same_bytes(tmp_path):
 # -----------------------------
 
 def test_the_pipeline_finds_a_path_in_a_second_independent_account(tmp_path):
-    """THE GENERALITY CLAIM, AND WHY IT NEEDED ITS OWN DATASET."""
+    """THE GENERALITY CLAIM, AND WHY IT NEEDED ITS OWN DATASET.
+
+    Every other test runs on the account this repository was written against, so
+    a pipeline that only worked there would pass them all. This account has
+    different names and a secret, not a bucket, as the prize, and the path to it
+    has to be found with no finding on the secret itself.
+    """
 
     state_graph, paths, records = run(
         tmp_path,
@@ -379,7 +403,12 @@ def test_the_pipeline_finds_a_path_in_a_second_independent_account(tmp_path):
 
 
 def test_the_shipped_path_depends_on_the_instance_profile_reference(tmp_path):
-    """WHAT THE DEMONSTRATION RESTS ON, WRITTEN DOWN."""
+    """WHAT THE DEMONSTRATION RESTS ON, WRITTEN DOWN.
+
+    The shipped OverPermissive path runs through PublicEC2Instance's
+    IamInstanceProfile reference. Deleting that one property has to cut every
+    route past the instance, which shows the path is built from that edge.
+    """
 
     with open(graph_runner.INFRA_PATH, "r", encoding="utf-8") as f:
         resources = json.load(f)
@@ -439,7 +468,12 @@ def test_the_shipped_path_depends_on_the_instance_profile_reference(tmp_path):
 # -----------------------------
 
 def test_a_zero_path_run_does_not_overwrite_a_good_export(tmp_path):
-    """THE FAILURE THAT LOOKED LIKE A SUCCESS."""
+    """THE FAILURE THAT LOOKED LIKE A SUCCESS.
+
+    An empty ruleset yields no paths, and writing that result would replace a
+    good export with one that reads like a clean account. A zero-path run leaves
+    the previous export untouched.
+    """
 
     empty_rules = tmp_path / "no_rules.yaml"
     empty_rules.write_text("[]\n", encoding="utf-8")
@@ -470,7 +504,12 @@ def test_a_zero_path_run_does_not_overwrite_a_good_export(tmp_path):
 
 
 def test_the_refusal_does_not_extend_to_the_graph_artifacts(tmp_path):
-    """WHY ONLY THE EXPORT IS PROTECTED."""
+    """WHY ONLY THE EXPORT IS PROTECTED.
+
+    The export is what the other repository consumes, so it is kept. The graph
+    and the renders describe this run, and a run that found nothing has to say
+    so in them rather than keep showing the previous run's paths.
+    """
 
     empty_rules = tmp_path / "no_rules.yaml"
     empty_rules.write_text("[]\n", encoding="utf-8")

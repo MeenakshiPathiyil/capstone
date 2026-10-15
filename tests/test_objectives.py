@@ -185,7 +185,12 @@ def test_narrowing_the_objective_set_narrows_the_targets(real_graph):
 # The per-objective policy.
 
 def test_denial_of_service_does_not_need_an_escalation(real_graph):
-    """THE ATTACK A SINGLE GLOBAL POLICY WOULD HAVE THROWN AWAY."""
+    """THE ATTACK A SINGLE GLOBAL POLICY WOULD HAVE THROWN AWAY.
+
+    Flooding a public instance needs no escalation: reaching it is the attack.
+    One privilege requirement for every objective rejected this route, and
+    judged as data theft it still is.
+    """
 
     route = ["OpenSecurityGroup", "PublicEC2Instance"]
 

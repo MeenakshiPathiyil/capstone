@@ -42,11 +42,12 @@ EXPORT_KEYS = [
     "objective"
 ]
 
-# The prefix and width of the generated source_id. The consumer prints it as
+# The prefix and width of the generated source_id.
 SOURCE_ID_PREFIX = "AP"
 SOURCE_ID_WIDTH = 3
 
 # How a path is named for a human. The hop chain itself, because that is what a
+# reader follows on the diagram.
 HOP_ARROW = " -> "
 
 # The industry the account belongs to.
@@ -72,6 +73,7 @@ SURFACE_BY_TYPE = {
     "AWS::IAM::Role": "OS / IAM permission model",
 
     # The profile is the vehicle the role travels on, not a surface of its own,
+    # so it counts as the role's surface.
     "AWS::IAM::InstanceProfile": "OS / IAM permission model",
 
     "AWS::S3::BucketPolicy": "OS / IAM permission model",
@@ -88,6 +90,7 @@ SURFACE_BY_TYPE = {
 }
 
 # A resource type this table has never met is still a hop an attacker took, so
+# it gets a generic surface rather than none.
 DEFAULT_SURFACE = "Internal network / cloud metadata services"
 
 
@@ -109,6 +112,7 @@ def technique_index(rules_path=RULES_PATH):
         # -----------------------------
 
         # A rule with no attack_techniques indexes to an empty list rather than
+        # being left out of the index.
         techniques = []
 
         for technique in rule.get("attack_techniques") or []:
@@ -276,6 +280,7 @@ def export_record(state_graph, path, rank, index, industry=DEFAULT_INDUSTRY):
         "industry": str(industry),
 
         # Already a string from attack_level_for(); str() anyway, because
+        # every field of the export is a string.
         "attack_level": str(path.get("attack_level") or ""),
 
         "techniques": render_techniques(path_techniques(path, index)),

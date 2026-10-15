@@ -1,4 +1,4 @@
-"""test_no_hand_rolled_prompts.py"""
+"""Tests that nothing builds the [INST] prompt by hand instead of using prompt_format."""
 
 import ast
 import json
@@ -23,7 +23,8 @@ CANONICAL_SOURCE_MARKER = "def build_prompt("
 
 
 def _repository_module_sources():
-    """{filename: current text} for every module a notebook may ship, including the"""
+    """{filename: current text} for every module a notebook may ship, including the
+    canonical prompt_format.py."""
     sources = {
         path.name: path.read_text(encoding="utf-8")
         for path in scanned_python_files()
@@ -106,7 +107,9 @@ def _canonical_source():
 # ── The scan covers what it claims to cover ───────────────────────────────────
 
 def test_every_notebook_in_the_repository_is_scanned():
-    """Notebooks are JSON, so they were invisible to a `*.py` glob while holding"""
+    """Notebooks are JSON, so they were invisible to a `*.py` glob while holding
+    prompt code. Every one of them must be found, and have code cells to scan.
+    """
     names = {path.name for path in NOTEBOOKS}
 
     assert names == {
@@ -122,7 +125,9 @@ def test_every_notebook_in_the_repository_is_scanned():
 
 
 def test_the_stale_pre_repair_notebooks_are_gone():
-    """The two notebooks under fine_tuning/ were pre-repair duplicates of the"""
+    """The two notebooks under fine_tuning/ were pre-repair duplicates of the
+    ones create_notebook.py now writes next to itself, and must stay deleted.
+    """
     assert not (FINE_TUNING_DIR / "colab_finetune_setup.ipynb").exists()
     assert not (FINE_TUNING_DIR / "finetune_output_test.ipynb").exists()
 
@@ -142,7 +147,9 @@ def test_module_does_not_hand_roll_an_inst_prompt(path):
 
 @pytest.mark.parametrize("path", NOTEBOOKS, ids=lambda p: p.name)
 def test_notebook_does_not_hand_roll_an_inst_prompt(path):
-    """Same assertion, over each code cell's Python. The only marker-bearing literal"""
+    """Same assertion, over each code cell's Python. The only marker-bearing literal
+    allowed is a verbatim copy of a repository module, which is exempt.
+    """
     offenders = _notebook_marker_literals(
         path,
         exempt=tuple(_repository_module_sources().values())
@@ -153,7 +160,8 @@ def test_notebook_does_not_hand_roll_an_inst_prompt(path):
 
 
 def _shipped_files(path):
-    """{filename: shipped text} read out of a notebook's"""
+    """{filename: shipped text} read out of a notebook's
+    `Path(name).write_text(contents)` calls."""
     shipped = {}
     for _, source in _code_cells(path):
         try:
@@ -185,7 +193,11 @@ def _shipped_files(path):
 
 
 def test_the_notebooks_ship_the_current_modules_verbatim():
-    """THE STALENESS CHECK."""
+    """THE STALENESS CHECK.
+
+    Every module a notebook ships must be byte-identical to the file in the
+    repository, or the notebook runs code the tests never saw.
+    """
     sources = _repository_module_sources()
 
     assert CANONICAL_SOURCE_MARKER in sources[CANONICAL_PROMPT_MODULE.name]
@@ -216,7 +228,11 @@ def test_the_canonical_builder_is_the_one_that_does_own_the_template():
 
 
 def test_the_scan_would_catch_the_historical_drift():
-    """GUARD THE GUARD."""
+    """GUARD THE GUARD.
+
+    The scan has to flag the hand-rolled template that actually drifted once, in a
+    module and in a notebook cell, while letting a docstring describe the format.
+    """
     drifted = (
         'def build(instruction, input_block):\n'
         '    return f"[INST] {instruction}\\n\\n{input_block} [/INST]"\n'

@@ -1,7 +1,7 @@
 """Read the ATT&CK IaaS matrix, and answer questions about a technique id.
 
 THEORY (what this replaces):
-graph/exporter.py ordered a path's techniques with two hardcoded structures — a
+attack_path/exporter.py ordered a path's techniques with two hardcoded structures — a
 list of kill-chain phase names and a dict of eleven technique ids mapped to them.
 Both were written by hand, neither could be checked against anything, and a rule
 citing a twelfth technique got silently sorted to the end. The ordering is now a

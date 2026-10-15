@@ -31,6 +31,7 @@ from security_state_graph.state_graph import SecurityStateGraph, build_state_gra
 # -----------------------------
 
 # Read off scenario_generation/prompt_generator.py's format_model_input(), which
+# formats each of these keys of a record into the model's prompt.
 THE_CONTRACT = {
     "source_id",
     "source_name",
@@ -46,6 +47,7 @@ THE_CONTRACT = {
 ATTACK_ID_PATTERN = re.compile(r"^T\d{4}(\.\d{3})?$")
 
 # The full surface vocabulary of the training data, copied from
+# scenario_generation/dataset_pipeline/parse_stix.py.
 TRAINING_DATA_SURFACES = {
     "Internet-facing services / user endpoints",
     "Application runtime environment",
@@ -73,6 +75,7 @@ SCENARIO_INPUT = (
 # -----------------------------
 
 # A describe_path()-shaped path, written by hand so the technique ordering can be
+# controlled: its rule ids are listed out of kill-chain order on purpose.
 HAND_WRITTEN_PATH = {
     "entry_id": "HandGroup",
     "target_id": "HandBucket",
@@ -83,6 +86,7 @@ HAND_WRITTEN_PATH = {
 }
 
 # The technique table those rule ids index into. Includes a technique with no
+# place in the kill chain (T9999) and one shared by two rules (T1190).
 HAND_WRITTEN_INDEX = {
     "LATE_RULE": [
         {"id": "T1021.001", "name": "Remote Services: Remote Desktop Protocol"},
@@ -127,7 +131,10 @@ def sample_graph(sample_infra):
 # -----------------------------
 
 def test_export_keys_are_exactly_the_keys_the_consumer_reads():
-    """The one assertion this file exists for. A key the consumer reads and the"""
+    """The one assertion this file exists for. A key the consumer reads and the
+    export does not write is a KeyError in the other repository, so the two sets
+    must match exactly.
+    """
 
     assert set(EXPORT_KEYS) == THE_CONTRACT
 
@@ -151,7 +158,10 @@ def test_every_exported_value_is_a_str(real_records):
 
 
 def test_values_stay_strings_when_the_path_carries_none(sample_graph):
-    """A path with no attack_level and no rule ids still exports six strings. The"""
+    """A path with no attack_level and no rule ids still exports six strings. The
+    consumer formats each one straight into the prompt, so None must become an
+    empty string rather than the text "None".
+    """
 
     empty_path = {
         "hops": ["SampleBucket"],
@@ -180,7 +190,10 @@ def test_techniques_are_deduped():
 
 
 def test_techniques_are_in_kill_chain_order():
-    """The rule ids in HAND_WRITTEN_PATH declare their techniques out of order on"""
+    """The rule ids in HAND_WRITTEN_PATH declare their techniques out of order on
+    purpose: the first rule leads with lateral movement. The export sorts them
+    into kill-chain order regardless.
+    """
 
     techniques = path_techniques(HAND_WRITTEN_PATH, HAND_WRITTEN_INDEX)
 
@@ -194,7 +207,9 @@ def test_techniques_are_in_kill_chain_order():
 
 
 def test_an_unmapped_technique_trails_rather_than_leads():
-    """An unknown id must not be promoted to the front of the kill chain, because"""
+    """An unknown id must not be promoted to the front of the kill chain, because
+    it has no phase to stand in. It ranks after every known tactic instead.
+    """
 
     techniques = path_techniques(HAND_WRITTEN_PATH, HAND_WRITTEN_INDEX)
 
@@ -211,7 +226,9 @@ def test_sub_techniques_inherit_their_parents_phase():
 
 
 def test_exported_technique_ids_match_the_attack_format(real_records):
-    """Each id in the rendered string is a real ATT&CK id — the consumer's system"""
+    """Each id in the rendered string is a real ATT&CK id: the consumer's system
+    instruction tells the model to use the ids exactly as provided.
+    """
 
     for record in real_records:
 
@@ -257,7 +274,9 @@ def test_technique_index_reads_the_shipped_rules(rules_path):
 
 
 def test_a_rule_with_no_techniques_indexes_to_an_empty_list(tmp_path):
-    """Absent rather than empty would make every caller branch on two different"""
+    """Absent rather than empty would make every caller branch on two different
+    shapes of "no techniques".
+    """
 
     rules_file = tmp_path / "rules.yaml"
     rules_file.write_text(
@@ -304,7 +323,9 @@ def test_surfaces_follow_the_hops_and_are_deduped(sample_graph):
 
 
 def test_the_target_surface_is_never_dropped(real_records, real_graph):
-    """Surfaces are never truncated, so the last hop — the data the attacker"""
+    """Surfaces are never truncated, so the last hop, the data the attacker
+    came for, always appears in the exported surfaces.
+    """
 
     for record, path in zip(
         real_records,
@@ -317,7 +338,9 @@ def test_the_target_surface_is_never_dropped(real_records, real_graph):
 
 
 def test_surfaces_use_the_training_data_vocabulary():
-    """Every phrase this module can emit is one of the twelve the training data was"""
+    """Every phrase this module can emit is one of the twelve the training data was
+    written with, so the model is never shown a surface it was not trained on.
+    """
 
     for surface in list(SURFACE_BY_TYPE.values()) + [DEFAULT_SURFACE]:
         assert surface in TRAINING_DATA_SURFACES, surface
@@ -371,7 +394,9 @@ def test_industry_defaults_and_can_be_overridden(real_graph, rules_path):
 # -----------------------------
 
 def test_an_empty_path_list_still_writes_valid_json(tmp_path):
-    """"No attack paths" is an answer the consumer loops over zero times. A missing"""
+    """"No attack paths" is an answer the consumer loops over zero times. A missing
+    file is not, so an empty export is still written as valid JSON.
+    """
 
     target = tmp_path / "attack_paths.json"
 
@@ -393,7 +418,9 @@ def test_write_export_creates_its_directory_and_overwrites(tmp_path):
 
 
 def test_the_export_is_deterministic(tmp_path):
-    """Two runs over the same dataset produce the same bytes — otherwise the golden"""
+    """Two runs over the same dataset produce the same bytes; otherwise the golden
+    file comparison below would fail for no reason.
+    """
 
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
@@ -410,7 +437,9 @@ def test_the_export_is_deterministic(tmp_path):
 # -----------------------------
 
 def test_the_full_export_matches_the_golden_file(tmp_path):
-    """The whole file, byte for byte. Every other test here asserts one property;"""
+    """The whole file, byte for byte. Every other test here asserts one property;
+    this one catches any change none of them anticipated.
+    """
 
     produced = tmp_path / "attack_paths.json"
 
@@ -420,7 +449,7 @@ def test_the_full_export_matches_the_golden_file(tmp_path):
         encoding="utf-8"
     ), (
         "the export changed — read the diff, then regenerate the golden file "
-        "(see the docstring at the top of this module)"
+        "(see 'If you break something' in DEVELOPERS.md)"
     )
 
 

@@ -79,6 +79,7 @@ DATA_TYPES = [
 ]
 
 # The IAM action prefix that governs each data type. "s3:GetObject" on Resource
+# "*" reaches buckets, not databases.
 SERVICE_BY_TYPE = {
     "AWS::S3::Bucket": "s3",
     "AWS::RDS::DBInstance": "rds",
@@ -136,6 +137,7 @@ HIJACK_CATEGORY = "hijack"
 WILDCARD = "*"
 
 # The separator in "s3:GetObject". An action with no separator that is not "*" is
+# not a shape this module can classify, so it covers no service.
 ACTION_SERVICE_SEPARATOR = ":"
 
 # The key that makes a grant conditional, and therefore not something this module
@@ -209,6 +211,7 @@ def build_capability_edges(infra):
             # -----------------------------
 
             # The Action decides which services the grant covers, so the question
+            # is asked per target service, not once per principal.
             if not grants_wildcard_for(
                 resource,
                 attached,
@@ -417,7 +420,8 @@ def infer_relation(infra, target_id):
 
 
 def grants_wildcard(properties, service=None):
-    """True when `properties` holds an unconditional Allow on Resource "*" whose"""
+    """True when `properties` holds an unconditional Allow on Resource "*" whose
+    Action reaches `service`, anywhere in its nesting."""
 
     if isinstance(properties, dict):
 
@@ -481,7 +485,8 @@ def action_covers_service(action, service):
 
 
 def is_wildcard_allow(statement, service=None):
-    """True for an unconditional Effect: Allow on Resource "*" whose Action reaches"""
+    """True for an unconditional Effect: Allow on Resource "*" whose Action reaches
+    `service`, or any service when it is None."""
 
     if statement.get("Effect") != "Allow":
         return False

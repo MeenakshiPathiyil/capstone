@@ -1,4 +1,4 @@
-"""prompt_generator.py"""
+"""Run the fine-tuned model over every exported attack path and library prompt."""
 
 import argparse
 import csv
@@ -418,6 +418,7 @@ def main() -> None:
             print(f"{'─'*70}")
 
             # Recorded for the CSV. generate_text() rebuilds it through the same
+            # format_model_input(), so the two cannot differ.
             full_prompt = format_model_input(prompt_entry, attack_path)
 
             print("[*] Generating scenario…")

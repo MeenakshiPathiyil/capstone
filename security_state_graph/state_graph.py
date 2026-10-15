@@ -72,6 +72,7 @@ ENTRY_REASON_FINDING = "{} ({}, {})"
 RULE_ID_JOINER = ", "
 
 # The finding fields the serialized node carries: everything the rule engine
+# reports about a finding except its resource, which is the node itself.
 STATE_KEYS = [
     "rule_id",
 
@@ -104,6 +105,7 @@ REVERSED_CATEGORIES = ["network_control"]
 BIDIRECTIONAL_CATEGORIES = ["traffic_path"]
 
 # The resource types an inbound network connection can actually arrive at, and
+# so the only targets a reversed or back-copied edge may have.
 INBOUND_REACHABLE_TYPES = [
     "AWS::EC2::Instance",
     # Load balancer plumbing. These do receive forwarded traffic — that is their
@@ -131,6 +133,7 @@ class SecurityStateGraph:
         # -----------------------------
 
         # raw_properties and semantic_properties are carried through, not
+        # re-derived: a node holds the resource as the parser left it.
 
         self.nodes = {}
 
@@ -172,6 +175,8 @@ class SecurityStateGraph:
                     "target": connection["target"],
 
                     # A connection's "type" is its semantic category, while a
+                    # node's "type" is its CloudFormation type, so the edge
+                    # calls it category.
                     "category": connection["type"],
 
                     "relation": connection["relation"]
@@ -190,6 +195,7 @@ class SecurityStateGraph:
             if node is None:
 
                 # Stale findings are expected, not exceptional. Kept as a list
+                # so the summary can count them and the runner can warn.
                 self.orphan_findings.append(finding)
 
                 print(
@@ -456,6 +462,7 @@ class SecurityStateGraph:
         # -----------------------------
 
         # The pair is the point. Stored edges are what the template declares and
+        # traversal edges are what an attacker walks, so both are written.
         return {
             "summary": {
                 "resources": len(self.nodes),
@@ -465,6 +472,7 @@ class SecurityStateGraph:
                 "targets": len(targets),
 
                 # Not one of the counts asked for, and kept anyway: it is the
+                # one number that shows findings were lost on the way in.
                 "orphan_findings": len(self.orphan_findings)
             },
 

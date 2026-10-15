@@ -36,6 +36,7 @@ SAME_ELEMENT_GROUP = {
 }
 
 # The false positive: 0.0.0.0/0 belongs to port 80, and 3389 is locked to an
+# internal range. Only a check that mixes ingress entries sees both on one group.
 CROSS_ELEMENT_GROUP = {
     "_structured": {
         "GroupDescription": "Web open to the world, remote desktop internal",
@@ -134,7 +135,12 @@ def test_scoped_and_matches_within_a_single_element():
 
 
 def test_scoped_and_does_not_match_across_different_elements():
-    """THE REGRESSION TEST."""
+    """THE REGRESSION TEST.
+
+    0.0.0.0/0 and 3389 sit on two different ingress entries here. A scoped AND
+    evaluates each entry on its own, so this group must not match while the
+    same-element group still does.
+    """
 
     condition = unrestricted_port(3389, scope="SecurityGroupIngress")
 
@@ -157,7 +163,9 @@ def test_scope_less_and_still_matches_across_elements():
 
 
 def test_scoped_or_still_matches_across_elements():
-    """Scope narrows an AND; it must not narrow the meaning of OR to less than"""
+    """Scope narrows an AND; it must not narrow the meaning of OR to less than
+    what it means unscoped: any element matching any operand is enough.
+    """
 
     condition = {
         "operator": "OR",
@@ -186,7 +194,9 @@ def test_scope_applies_to_a_bare_leaf():
 
 
 def test_nested_scope_re_roots_at_the_inner_element():
-    """A scoped subtree may scope again on a list inside the element it was"""
+    """A scoped subtree may scope again on a list inside the element it was
+    given, and that inner scope resolves against the element, not the resource.
+    """
 
     resource = {
         "_structured": {
@@ -258,7 +268,9 @@ def test_nested_scope_re_roots_at_the_inner_element():
 
 
 def test_scope_over_a_single_dictionary_is_one_element():
-    """CloudFormation writes a one-entry list as a bare mapping often enough that"""
+    """CloudFormation writes a one-entry list as a bare mapping often enough that
+    the scope has to accept it, as a list of one element.
+    """
 
     resource = {
         "_structured": {
@@ -403,7 +415,9 @@ def test_and_or_not_nested_three_deep():
 
 
 def test_not_inverts_a_missing_field():
-    """A missing field is False, so NOT over it is True. Stated so the next"""
+    """A missing field is False, so NOT over it is True. Stated so the next
+    change to missing-field handling cannot flip it unnoticed.
+    """
 
     assert evaluate_expression(
         OPERATOR_RESOURCE,
@@ -425,7 +439,10 @@ def test_empty_operand_lists_and_malformed_nodes_return_false():
 # -----------------------------
 
 def test_missing_field_returns_false_instead_of_raising():
-    """Rules are shared across resource types, so most fields are absent from"""
+    """Rules are shared across resource types, so most fields are absent from
+    most resources. A missing field, or a leaf with no field or no comparison,
+    is False rather than an error.
+    """
 
     assert evaluate_leaf(
         OPERATOR_RESOURCE,
@@ -474,7 +491,9 @@ def test_get_field_values_walks_dicts_and_lists():
 
 
 def test_evaluator_falls_back_to_the_resource_itself():
-    """_structured is what attribute extraction adds; a resource without it is"""
+    """_structured is what attribute extraction adds; a resource without it is
+    evaluated as it stands.
+    """
 
     assert evaluate_leaf(
         {"Engine": "postgres"},

@@ -137,7 +137,12 @@ def sample_graph(sample_infra):
 # -----------------------------
 
 def test_state_lands_on_the_correct_node(real_graph):
-    """THE JOIN."""
+    """THE JOIN.
+
+    A finding names its resource by id, and the graph attaches it to the node
+    with that id. The open-port state has to land on OpenSecurityGroup, and only
+    ever on a security group.
+    """
 
     assert "unrestricted_common_port_access" in state_ids(
         real_graph,
@@ -154,7 +159,10 @@ def test_state_lands_on_the_correct_node(real_graph):
 
 
 def test_every_state_carries_the_fields_later_phases_read(real_graph):
-    """The whole finding is attached, not just its id: entry points are selected by"""
+    """The whole finding is attached, not just its id: entry points are selected by
+    its semantic and severity is derived from it, so a state missing either one
+    breaks the phases that read the graph.
+    """
 
     for node in real_graph.nodes.values():
 
@@ -239,7 +247,9 @@ def test_the_node_connections_are_exactly_the_stored_edges(real_graph):
 
 
 def test_node_with_no_findings_has_an_empty_state_list(sample_graph):
-    """Not None, not a KeyError, not a missing node. A resource with nothing wrong"""
+    """Not None, not a KeyError, not a missing node. A resource with nothing wrong
+    with it is still a node, with an empty `states` list.
+    """
 
     assert sample_graph.states_of("SampleSecurityGroup") == [
         HAND_WRITTEN_FINDINGS[0]
@@ -266,7 +276,9 @@ def test_every_resource_becomes_a_node(real_graph, real_resource_dicts):
 
 
 def test_no_finding_from_the_real_dataset_is_orphaned(real_graph):
-    """The join key already agreed before this phase; this is the assertion that"""
+    """The join key already agreed before this phase; this is the assertion that
+    keeps it agreeing: every finding the shipped rules raise lands on a node.
+    """
 
     assert real_graph.orphan_findings == []
 
@@ -277,7 +289,12 @@ def test_finding_for_an_unknown_resource_warns_and_is_skipped(
     sample_infra,
     capsys
 ):
-    """THE FAILURE THIS REPOSITORY ALREADY HAD."""
+    """THE FAILURE THIS REPOSITORY ALREADY HAD.
+
+    Findings generated against an older dataset name a resource that is gone.
+    The stale row is warned about and set aside in orphan_findings, and the rest
+    of the file still lands, rather than one bad row failing the whole join.
+    """
 
     state_graph = SecurityStateGraph(sample_infra, STALE_FINDINGS)
 
@@ -295,7 +312,9 @@ def test_finding_for_an_unknown_resource_warns_and_is_skipped(
 
 
 def test_an_empty_findings_list_still_builds_a_graph(sample_infra):
-    """Rules and topology are separate inputs; one of them being empty is a graph"""
+    """Rules and topology are separate inputs; one of them being empty is a graph
+    with no states on it, not an error.
+    """
 
     state_graph = SecurityStateGraph(sample_infra, [])
 
@@ -310,7 +329,13 @@ def test_an_empty_findings_list_still_builds_a_graph(sample_infra):
 # -----------------------------
 
 def test_raw_properties_survive_onto_every_node(real_graph, real_resource_dicts):
-    """WHY THE GRAPH IS BUILT IN MEMORY."""
+    """WHY THE GRAPH IS BUILT IN MEMORY.
+
+    Path scoring reads a node's raw_properties and semantic_properties to decide
+    whether its own configuration puts it on the internet. The artifact on disk
+    drops both, so the search runs on the in-memory graph, and every node there
+    has to carry them exactly as the infra model has them.
+    """
 
     for resource in real_resource_dicts:
 
@@ -326,7 +351,10 @@ def test_raw_properties_survive_onto_every_node(real_graph, real_resource_dicts)
 
 
 def test_build_state_graph_joins_both_inputs_from_disk_in_one_pass():
-    """The end-to-end entry point. raw_properties is asserted again here because it"""
+    """The end-to-end entry point. raw_properties is asserted again here because it
+    is what the artifact on disk leaves out, so only the graph build_state_graph
+    returns can supply it.
+    """
 
     state_graph = build_state_graph()
 
@@ -375,7 +403,12 @@ def test_stored_edge_carries_its_category_and_relation(real_graph):
 # -----------------------------
 
 def test_network_control_edge_is_reversed_for_traversal(real_graph):
-    """THE DESIGN DECISION."""
+    """THE DESIGN DECISION.
+
+    An instance declares its security group, but an attacker arrives through the
+    group. So a network_control edge is stored as declared and reversed for
+    traversal: group to instance, never instance to group.
+    """
 
     traversal = pairs(real_graph.traversal_edges(), "network_control")
 
@@ -423,7 +456,10 @@ def test_a_bidirectional_edge_is_emitted_both_ways_and_flagged_once(real_graph):
 
 
 def test_the_view_neither_duplicates_nor_drops_an_edge(real_graph):
-    """Reversal replaces the stored edge; it does not add a second copy. Keeping"""
+    """Reversal replaces the stored edge; it does not add a second copy. Keeping
+    both lists the same length, with the same categories, shows the view is the
+    stored edges turned round and nothing more.
+    """
 
     traversal = real_graph.traversal_edges()
 
@@ -449,7 +485,10 @@ def test_building_the_view_does_not_mutate_the_stored_edges(real_graph):
 # -----------------------------
 
 def test_adjacency_de_duplicates_parallel_edges(parallel_edge_infra):
-    """ParallelRole reaches ParallelBucket twice, through a "connection" edge and a"""
+    """ParallelRole reaches ParallelBucket twice, through a "connection" edge and a
+    "capability" edge from its "*" grant. Both stay in the traversal edges, but the
+    adjacency lists the bucket once.
+    """
 
     state_graph = SecurityStateGraph(parallel_edge_infra, [])
 
@@ -474,7 +513,9 @@ def test_adjacency_has_an_entry_for_every_node(real_graph):
 # -----------------------------
 
 def test_the_artifact_carries_exactly_the_four_documented_blocks(real_graph):
-    """summary / nodes / edges / traversal_edges, and nothing else. An extra block"""
+    """summary / nodes / edges / traversal_edges, and nothing else. An extra block
+    is one GRAPH_FILES has no file for, and write_state_graph refuses it.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -487,7 +528,12 @@ def test_the_artifact_carries_exactly_the_four_documented_blocks(real_graph):
 
 
 def test_every_node_reaches_the_artifact_with_its_states(real_graph):
-    """THE COMPLETENESS ASSERTION."""
+    """THE COMPLETENESS ASSERTION.
+
+    Every node in memory reaches the artifact with every one of its states, each
+    carrying exactly the STATE_KEYS fields. Nothing is dropped or reordered on
+    the way to disk.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -519,7 +565,10 @@ def test_every_node_reaches_the_artifact_with_its_states(real_graph):
 
 
 def test_the_artifact_does_not_carry_raw_properties(real_graph):
-    """Deliberately dropped even though it is on the node. It is already on disk"""
+    """Deliberately dropped even though it is on the node. It is already on disk
+    in data/normalized_resources.json, and repeating it on every node would bloat
+    graph_nodes.json.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -552,7 +601,10 @@ def test_the_summary_counts_orphan_findings_rather_than_hiding_them(
     sample_infra,
     capsys
 ):
-    """The distinction the count exists to make: "the rules found nothing" and "the"""
+    """The distinction the count exists to make: "the rules found nothing" and "the
+    findings named resources that are gone" look the same in the findings count,
+    so orphans are counted on their own.
+    """
 
     state_graph = SecurityStateGraph(sample_infra, STALE_FINDINGS)
 
@@ -567,7 +619,12 @@ def test_the_summary_counts_orphan_findings_rather_than_hiding_them(
 # -----------------------------
 
 def test_is_entry_agrees_with_the_module_that_searches_entries(real_graph):
-    """THE FLAG THAT MUST NOT DIVERGE."""
+    """THE FLAG THAT MUST NOT DIVERGE.
+
+    is_entry is written onto each node, and the search picks its starting nodes
+    with entry_points(). If the two disagreed, the artifact would show entry
+    points the search never starts from, so they are pinned to the same answer.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -607,7 +664,10 @@ def test_targets_are_still_selectable_from_the_graph(real_graph):
 
 
 def test_the_entry_reason_names_the_rule_that_made_it_one(real_graph):
-    """The reason is the evidence. Entry points are derived from rule metadata, so"""
+    """The reason is the evidence. Entry points are derived from rule metadata, so
+    the reason names the findings behind one: the rule, the state it raised and
+    its severity.
+    """
 
     nodes = {
         node["id"]: node
@@ -664,7 +724,12 @@ def test_the_entry_reason_names_every_exposure_finding(real_graph):
 # -----------------------------
 
 def test_max_severity_is_the_worst_and_not_the_alphabetically_last(real_graph):
-    """THE COMPARISON THAT WOULD HAVE BEEN WRONG."""
+    """THE COMPARISON THAT WOULD HAVE BEEN WRONG.
+
+    Compared as strings, "medium" beats "critical". max_severity is picked by
+    severity weight, so OverPermissiveRole reports critical, and every node's
+    value is the heaviest of its own findings.
+    """
 
     nodes = {
         node["id"]: node
@@ -674,6 +739,7 @@ def test_max_severity_is_the_worst_and_not_the_alphabetically_last(real_graph):
     assert nodes["OverPermissiveRole"]["max_severity"] == "critical"
 
     # a node with nothing wrong with it answers None, not "clean": "clean" is
+    # not a severity, and severity_weight would still give it a weight
     assert nodes["OverPermissiveInstanceProfile"]["max_severity"] is None
 
     for node_id, node in nodes.items():
@@ -713,7 +779,13 @@ def test_both_edge_lists_reach_the_artifact_complete(real_graph):
 
 
 def test_the_gate_dropped_edge_is_stored_and_not_traversed(gate_dropped_infra):
-    """THE ARM THE SHIPPED DATASET NEVER EXERCISES."""
+    """THE ARM THE SHIPPED DATASET NEVER EXERCISES.
+
+    A network_control edge declared by a resource that cannot receive inbound
+    traffic, here a Lambda, is kept in the stored edges and dropped from the
+    traversal view instead of being reversed. Only this fixture reaches that
+    branch of the INBOUND_REACHABLE_TYPES gate.
+    """
 
     artifact = SecurityStateGraph(gate_dropped_infra, []).to_dict()
 
@@ -738,7 +810,10 @@ def test_the_gate_dropped_edge_is_stored_and_not_traversed(gate_dropped_infra):
 
 
 def test_both_edge_lists_are_sorted_on_all_four_fields(real_graph):
-    """The graph is a multigraph — a role that both names a bucket and grants "*"""
+    """The graph is a multigraph: a role that both names a bucket and grants "*"
+    has two edges to it, so sorting on source and target alone leaves their order
+    to chance. Both lists are sorted on all four fields.
+    """
 
     artifact = real_graph.to_dict()
 
@@ -750,7 +825,10 @@ def test_both_edge_lists_are_sorted_on_all_four_fields(real_graph):
 
 
 def test_edge_sort_key_separates_parallel_edges(parallel_edge_infra):
-    """ParallelRole reaches ParallelBucket through a "connection" edge and a"""
+    """ParallelRole reaches ParallelBucket through a "connection" edge and a
+    "capability" edge. Only category and relation tell them apart, so
+    edge_sort_key has to give them distinct keys.
+    """
 
     state_graph = SecurityStateGraph(parallel_edge_infra, [])
 
@@ -832,7 +910,12 @@ def test_the_default_artifacts_land_in_output_and_never_in_the_cwd():
 
 
 def test_the_serialized_graph_is_deterministic(tmp_path):
-    """THE CLAIM THE SORTING EXISTS FOR."""
+    """THE CLAIM THE SORTING EXISTS FOR.
+
+    Two builds from the same inputs write byte-identical files. That is what the
+    sorted node and edge order is there to guarantee, so a diff of the artifact
+    shows a real change and nothing else.
+    """
 
     def write_into(folder):
         folder.mkdir()
@@ -866,5 +949,5 @@ def test_each_block_matches_its_golden_file(tmp_path):
             encoding="utf-8"
         ), (
             "the %s block changed - read the diff, then regenerate the golden "
-            "files (see the docstring at the top of this module)" % name
+            "files (see 'If you break something' in DEVELOPERS.md)" % name
         )

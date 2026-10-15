@@ -41,7 +41,7 @@ ATTACK_GRAPH_EDGES_PATH = OUTPUT_DIR / "attack_graph_edges.json"
 
 # block name -> file, iterated on write so a block added to to_dict and left out
 # of the table fails a test rather than going unwritten. Same arrangement as
-# graph/state_graph.py's GRAPH_FILES.
+# security_state_graph/state_graph.py's GRAPH_FILES.
 ATTACK_GRAPH_FILES = {
     "summary": ATTACK_GRAPH_SUMMARY_PATH,
     "nodes": ATTACK_GRAPH_NODES_PATH,
@@ -57,7 +57,7 @@ ATTACKER_NODE_TYPE = "attacker"
 
 STATE_NODE_TYPE = "state"
 
-# Hops from an entry, matching graph/path_finder.MAX_DEPTH. Restated rather than
+# Hops from an entry, matching attack_path/path_finder.MAX_DEPTH. Restated rather than
 # imported to avoid a circular import; tests/test_attack_graph.py asserts they
 # agree, because a graph built to a different depth than the search walks is a
 # graph that either wastes work or hides paths.

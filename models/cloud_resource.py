@@ -35,8 +35,10 @@ class CloudResource:
             "traffic_path": "association"
         }
         # capability = a wildcard grant reaching a resource it never names,
+        # so it gets its own relation rather than passing as a dependency.
 
         # one edge per target per relation_type. the flattener hands the
+        # same reference over more than once, so a repeat is dropped here.
         for connection in self.connections:
             if (
                 connection["target"] == target

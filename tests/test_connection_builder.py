@@ -74,6 +74,7 @@ DANGLING_RESOURCES = [
 ]
 
 # A group that lists itself as its own ingress source — legal in AWS, and a
+# common way to let members talk to each other, but not a hop an attacker can take.
 SELF_REFERENCE_RESOURCES = [
     {
         "id": "SelfReferencingGroup",
@@ -177,6 +178,8 @@ SCOPED_POLICY_RESOURCES = [
 ]
 
 # A bucket policy granting "*" while a database sits next to it in the same
+# template. The policy is attached to the bucket, so its "*" must not reach the
+# database.
 RESOURCE_POLICY_RESOURCES = [
     {
         "id": "AttachedPolicy",
@@ -223,6 +226,7 @@ RESOURCE_POLICY_RESOURCES = [
 ]
 
 # One untagged reference per target type, so the inferred classification can be
+# asserted type by type.
 INFERENCE_RESOURCES = [
     {
         "id": "ReferencingInstance",
@@ -289,7 +293,12 @@ INFERENCE_RESOURCES = [
 # -----------------------------
 
 def test_pre_existing_network_control_edge_survives(real_infra):
-    """THE REGRESSION TEST."""
+    """THE REGRESSION TEST.
+
+    The tagged network_control edge from PublicEC2Instance to OpenSecurityGroup
+    predates the target-type fallback. It must still be there, typed by its
+    annotation, and exactly once.
+    """
 
     assert ("OpenSecurityGroup", "network_control", "association") in edges_from(
         real_infra,
@@ -304,7 +313,10 @@ def test_pre_existing_network_control_edge_survives(real_infra):
 
 
 def test_annotation_stays_authoritative_over_the_target_type(sample_infra):
-    """A tag that *can* classify is not second-guessed. SampleRole reaches"""
+    """A tag that *can* classify is not second-guessed. SampleRole reaches
+    SampleBucket through a Resource tagged "connection", and that tag, not the
+    bucket's type, is what types the edge.
+    """
 
     assert ("SampleBucket", "connection", "dependency") in edges_from(
         sample_infra,
@@ -343,7 +355,9 @@ def test_infer_relation_falls_back_for_an_unknown_target():
 
 
 def test_dangling_reference_creates_no_edge():
-    """Every property here names something that was never declared, including"""
+    """Every property here names something that was never declared, including
+    the ones tagged with an allowed category, so no edge is drawn at all.
+    """
 
     infra = build_infra_from_resources(DANGLING_RESOURCES)
 
@@ -351,7 +365,9 @@ def test_dangling_reference_creates_no_edge():
 
 
 def test_no_self_edges():
-    """A resource referencing itself, once through an allowed category and once"""
+    """A resource referencing itself, once through an allowed category and once
+    through an untagged property, gets no edge to itself either way.
+    """
 
     infra = build_infra_from_resources(SELF_REFERENCE_RESOURCES)
 
@@ -361,7 +377,10 @@ def test_no_self_edges():
 # -----------------------------
 
 def test_wildcard_grant_reaches_every_data_resource(real_infra):
-    """The privilege-escalation hop. OverPermissiveRole allows "*" on "*", which"""
+    """The privilege-escalation hop. OverPermissiveRole allows "*" on "*", which
+    reaches every data resource in the dataset as a capability edge, named in the
+    policy or not.
+    """
 
     reached = targets_from(real_infra, "OverPermissiveRole", "capability")
 
@@ -375,7 +394,12 @@ def test_wildcard_grant_reaches_every_data_resource(real_infra):
 
 
 def test_scoped_policy_does_not_fan_out():
-    """THE DISCRIMINATING TEST."""
+    """THE DISCRIMINATING TEST.
+
+    ScopedRole allows s3:GetObject on one concrete ARN, trailing "*" and all, and
+    denies "*" on "*". Neither is an account-wide grant, so the role reaches no
+    data resource and the model has no edges at all.
+    """
 
     infra = build_infra_from_resources(SCOPED_POLICY_RESOURCES)
 
@@ -384,7 +408,12 @@ def test_scoped_policy_does_not_fan_out():
 
 
 def test_resource_attached_policy_does_not_fan_out():
-    """THE OVER-CONNECTION."""
+    """THE OVER-CONNECTION.
+
+    A bucket policy's "*" means "anyone, on this bucket". Only IAM principals fan
+    a wildcard out, so the policy reaches its own bucket through the Bucket
+    reference and never the unrelated database.
+    """
 
     infra = build_infra_from_resources(RESOURCE_POLICY_RESOURCES)
 
@@ -408,7 +437,10 @@ def test_bucket_policy_reaches_only_the_bucket_it_is_attached_to(real_infra):
 
 
 def test_wildcard_written_as_a_list_still_fans_out():
-    """Resource: ["*"] is the same grant as Resource: "*", and Action: ["*"] is the"""
+    """Resource: ["*"] is the same grant as Resource: "*", and Action: ["*"] is the
+    same as Action: "*". Written as lists, the grant still reaches every data
+    resource.
+    """
 
     resources = [
         {
@@ -456,7 +488,9 @@ def test_wildcard_written_as_a_list_still_fans_out():
 
 
 def test_only_allow_statements_grant():
-    """All four ways a statement fails to be an account-wide grant, and each of them"""
+    """All four ways a statement fails to be an account-wide grant, and each of them
+    on its own is enough to stop the fan-out.
+    """
 
     assert is_wildcard_allow(
         {"Effect": "Allow", "Action": "*", "Resource": "*"}
@@ -487,7 +521,12 @@ def test_only_allow_statements_grant():
 
 
 def test_an_action_scoped_grant_does_not_reach_another_service():
-    """THE OVER-CONNECTION THIS SCOPING EXISTS TO PREVENT."""
+    """THE OVER-CONNECTION THIS SCOPING EXISTS TO PREVENT.
+
+    s3:GetObject on "*" is account-wide within s3 and nowhere else. Reading the
+    Action per service keeps that grant from drawing a capability edge to a
+    database.
+    """
 
     resources = [
         {
@@ -554,7 +593,10 @@ def test_an_action_scoped_grant_does_not_reach_another_service():
 
 
 def test_a_conditional_grant_is_treated_as_scoped():
-    """A Condition is how a wildcard is made narrow — a source IP range, an MFA"""
+    """A Condition is how a wildcard is made narrow: a source IP range, an MFA
+    requirement. This module cannot evaluate one, so a conditional grant is
+    treated as scoped and draws no edge.
+    """
 
     resources = [
         {
@@ -625,7 +667,9 @@ def test_a_conditional_grant_is_treated_as_scoped():
 
 
 def test_both_passes_are_idempotent(real_infra):
-    """The passes are run by the pipeline; a later stage re-running one of them"""
+    """The passes are run by the pipeline; a later stage re-running one of them
+    must not add a single edge.
+    """
 
     before = all_edges(real_infra)
 
@@ -638,7 +682,9 @@ def test_both_passes_are_idempotent(real_infra):
 # -----------------------------
 
 def test_compute_reaches_identity_through_its_instance_profile(real_infra):
-    """The dataset's identity half, through the resource AWS actually puts in the"""
+    """The dataset's identity half, through the resource AWS actually puts in the
+    middle: the instance names an instance profile, and the profile names the role.
+    """
 
     assert (
         "OverPermissiveInstanceProfile", "identity", "dependency"
@@ -667,7 +713,10 @@ def test_the_compute_to_data_chain_is_connected(real_infra):
 def test_the_instance_profile_does_not_fan_out_a_wildcard_it_does_not_hold(
     real_infra
 ):
-    """AWS::IAM::InstanceProfile is in IAM_PRINCIPAL_TYPES, so the wildcard pass"""
+    """AWS::IAM::InstanceProfile is in IAM_PRINCIPAL_TYPES, so the wildcard pass
+    looks at it. It holds no policy of its own, so it gets no capability edge; its
+    only edge is to the role it carries.
+    """
 
     reached = targets_from(
         real_infra,
@@ -718,7 +767,7 @@ def test_the_edge_store_refuses_an_exact_repeat():
 
 
 def test_real_dataset_edge_set_is_pinned(real_infra):
-    """The true count, written out. This was "at least six" while the sixth edge"""
+    """The true count, written out."""
 
     edges = all_edges(real_infra)
 
@@ -753,7 +802,9 @@ def test_real_dataset_edge_set_is_pinned(real_infra):
 
 
 def test_every_edge_has_a_known_relation(real_infra):
-    """"unknown" is what add_connection() falls through to for a category it was"""
+    """"unknown" is what add_connection() falls through to for a category it was
+    given no relation for. No edge in the dataset may carry it.
+    """
 
     assert [
         edge

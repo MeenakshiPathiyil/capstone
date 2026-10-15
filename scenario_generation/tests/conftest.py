@@ -1,4 +1,4 @@
-"""conftest.py"""
+"""Shared paths, file scans and record fixtures for the scenario_generation tests."""
 
 import json
 from pathlib import Path
