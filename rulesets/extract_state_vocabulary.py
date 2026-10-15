@@ -5,9 +5,11 @@ from pathlib import Path
 import yaml
 
 
-INPUT_YAML = "canonical_rules.yaml"
-OUTPUT_CSV = "state_vocabulary.csv"
-OUTPUT_JSON = "state_vocabulary.json"
+HERE = Path(__file__).resolve().parent
+
+INPUT_YAML = HERE / "canonical_rules.yaml"
+OUTPUT_CSV = HERE / "state_vocabulary.csv"
+OUTPUT_JSON = HERE / "state_vocabulary.json"
 
 
 def load_yaml(path):
@@ -78,7 +80,8 @@ def write_csv(rows, path):
                 "display_name",
                 "resource_type",
                 "source_rule_id"
-            ]
+            ],
+            lineterminator="\n"
         )
 
         writer.writeheader()

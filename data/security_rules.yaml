@@ -1,7 +1,7 @@
 # Security rules.
 #
 # ORIGIN:
-# Rules 1-11 are the canonical ruleset (~/Downloads/canonical_rules.yaml, owned by
+# Rules 1-11 are the canonical ruleset (rulesets/canonical_rules.yaml, owned by
 # Meenakshi, derived from AWS Config managed rules). Their `id`, `source_id`,
 # `semantic`, `state`, `summary`, `conditions`, `parameters` and `references` are
 # hers. Where this file departs from that source the deviation is written next to
