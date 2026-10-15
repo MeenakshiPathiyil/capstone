@@ -13,9 +13,9 @@ from attack_path.path_finder import (
     is_exploitable,
     load_objectives,
     objective_targets,
-    objectives_of,
-    score_path
+    objectives_of
 )
+from attack_path.scoring import score_path
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
 from tests.conftest import data_theft_only
 

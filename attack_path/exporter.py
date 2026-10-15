@@ -1,17 +1,18 @@
 """Export ranked attack paths in the shape the scenario generator reads."""
 
-import json
 from pathlib import Path
 
 from engine.attack_catalog import phase_rank as catalog_phase_rank, resolve
 from engine.privesc_detector import load_methods
 from engine.rule_engine import RuleEngine
-from attack_path.path_finder import (
+from attack_path.path_finder import find_attack_paths
+from attack_path.scoring import (
     ATTACK_LEVEL_HIGH,
-    INFRA_PATH,
-    RULES_PATH,
-    find_attack_paths,
     select_high_risk
+)
+from security_state_graph.state_graph import (
+    INFRA_PATH,
+    RULES_PATH
 )
 from security_state_graph.state_graph import build_state_graph
 from utils.helpers import write_json

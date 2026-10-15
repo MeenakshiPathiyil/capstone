@@ -3,16 +3,14 @@
 import json
 from pathlib import Path
 
-from attack_path.path_finder import (
+from attack_path.scoring import (
     ATTACK_LEVEL_CRITICAL,
     ATTACK_LEVEL_HIGH,
-    ATTACK_LEVEL_MEDIUM,
-    EXPOSURE_SEMANTIC,
-    PRIVILEGE_SEMANTIC
+    ATTACK_LEVEL_MEDIUM
 )
 from attack_path.renderer import DOT_PATH, MERMAID_PATH
 from security_state_graph.attack_graph import ATTACK_GRAPH_FILES
-from security_state_graph.state_graph import GRAPH_FILES, REVERSED_CATEGORIES
+from security_state_graph.state_graph import GRAPH_FILES
 from runner import graph_runner
 
 
@@ -247,7 +245,6 @@ def test_the_default_artifacts_land_in_output(tmp_path):
         graph_runner.BASE_DIR / "data" / "security_rules.yaml"
     )
 
-    assert graph_runner.GRAPH_FILES == GRAPH_FILES
     assert graph_runner.MERMAID_PATH == MERMAID_PATH
     assert graph_runner.DOT_PATH == DOT_PATH
 
@@ -517,7 +514,7 @@ def test_only_high_risk_paths_reach_the_export(tmp_path):
     what the search actually found.
     """
 
-    from attack_path.path_finder import ATTACK_LEVEL_MEDIUM
+    from attack_path.scoring import ATTACK_LEVEL_MEDIUM
 
     _, paths, records = run(tmp_path)
 

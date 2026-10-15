@@ -17,12 +17,10 @@ Usage:
 
 import argparse
 import csv
-import os
 import re
 import sys
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Optional
 
 
 # ── Section / format constants ────────────────────────────────────────────────
@@ -267,7 +265,6 @@ def _avg(values: list) -> float:
 
 def print_table(all_metrics: list[OutputMetrics]):
     """Print a compact per-output metrics table to stdout."""
-    col_w = 22
     id_w  = 10
     m_w   = 9
 

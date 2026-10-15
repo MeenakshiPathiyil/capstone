@@ -182,7 +182,7 @@ def call_gemini(client, model_name: str, prompt: str, max_retries: int = 3) -> s
                 raise FatalAPIConfigurationError(
                     "GEMINI_API_KEY is invalid for generativelanguage.googleapis.com. "
                     "Create a valid key in Google AI Studio and update .env."
-                )
+                ) from e
 
             if "certificate_verify_failed" in err_lower or "self-signed certificate in certificate chain" in err_lower:
                 print("\n    [!] TLS certificate verification failed.")
@@ -251,7 +251,7 @@ def main():
 
     client = genai.Client(api_key=api_key, http_options=http_options)
     print(f"[+] Model  : {args.model}")
-    print(f"[+] Limits : 15 req/min, 1000 req/day (free tier)")
+    print("[+] Limits : 15 req/min, 1000 req/day (free tier)")
 
     inputs_path = Path(args.inputs)
     if not inputs_path.exists():

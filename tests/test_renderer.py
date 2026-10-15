@@ -824,7 +824,7 @@ def test_every_label_in_the_real_renders_is_quoted(mermaid, dot):
             assert "::" in line or "InstanceProfile" in line
             assert line.count("\"") == 2
 
-    for token, (label, _, _, _) in dot_nodes(dot).items():
+    for label, _, _, _ in dot_nodes(dot).values():
         assert "::" in label
 
 

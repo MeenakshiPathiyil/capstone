@@ -17,7 +17,6 @@ from collections import Counter
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import seaborn as sns
 
 # ── Config ────────────────────────────────────────────────────────────────────

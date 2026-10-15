@@ -267,7 +267,7 @@ def build_comparison_notebook():
     )
 
     config = (
-        "import gc, csv, json, time, torch\n"
+        "import gc, csv, json, torch\n"
         "from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\n"
         "from peft import PeftModel\n"
         "import prompt_format  # shipped above — same builder as training\n"

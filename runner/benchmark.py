@@ -57,15 +57,8 @@ import signal
 import sys
 from pathlib import Path
 
-from engine.connection_builder import (
-    build_capability_edges,
-    build_connections,
-    build_escalation_edges
-)
 from attack_path.path_finder import find_attack_paths
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
-from models.cloud_resource import CloudResource
-from models.infra_model import InfraModel
 from parser.infra_parser import (
     extract_semantic_properties,
     flatten_properties,

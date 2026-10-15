@@ -12,19 +12,17 @@ from attack_path.exporter import (
     write_steps
 )
 from security_state_graph.attack_graph import (
-    ATTACK_GRAPH_FILES,
     build_attack_graph,
     write_attack_graph
 )
-from attack_path.path_finder import (
+from attack_path.path_finder import find_attack_paths
+from attack_path.scoring import (
     ATTACK_LEVEL_HIGH,
-    find_attack_paths,
     select_high_risk
 )
 from main import INFRA_OUTPUT_PATH, build_infra_model, save_infra_model
 from attack_path.renderer import DOT_PATH, MERMAID_PATH, write_dot, write_mermaid
 from security_state_graph.state_graph import (
-    GRAPH_FILES,
     build_state_graph,
     write_state_graph
 )

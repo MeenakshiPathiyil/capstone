@@ -581,7 +581,7 @@ def test_the_shipped_ingress_rules_still_fire_on_the_real_dataset(
 
     from processing.attribute_extractor import process_resources
     from processing.attributes import project_all
-    from attack_path.path_finder import finding_severity
+    from security_state_graph.semantics import finding_severity
 
     engine = RuleEngine(rules_path)
 

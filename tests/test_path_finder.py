@@ -6,28 +6,31 @@ import pytest
 import yaml
 
 from attack_path.path_finder import (
+    build_attack_paths,
+    describe_path,
+    find_attack_paths,
+    is_exploitable,
+    walk_paths
+)
+from attack_path.scoring import (
     ATTACK_LEVEL_CRITICAL,
     ATTACK_LEVEL_HIGH,
     ATTACK_LEVEL_MEDIUM,
     CRITICAL_SCORE_THRESHOLD,
-    DEFAULT_SEVERITY_WEIGHT,
     HIGH_SCORE_THRESHOLD,
     LENGTH_DAMPING_PER_HOP,
-    MAX_DEPTH,
     PUBLIC_ENTRY_BOOST,
-    SEVERITY_WEIGHTS,
     attack_level_for,
-    build_attack_paths,
-    data_targets,
-    describe_path,
-    entry_points,
-    find_attack_paths,
-    is_exploitable,
     is_public_entry,
     path_severity_total,
-    score_path,
-    severity_weight,
-    walk_paths
+    score_path
+)
+from security_state_graph.semantics import (
+    DEFAULT_SEVERITY_WEIGHT,
+    SEVERITY_WEIGHTS,
+    data_targets,
+    entry_points,
+    severity_weight
 )
 from tests.conftest import data_theft_only
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
@@ -300,7 +303,7 @@ def test_entry_points_come_from_rule_metadata(real_graph):
     in, which is the most obvious entry point there is.
     """
 
-    from attack_path.path_finder import ENTRY_SEMANTICS
+    from security_state_graph.semantics import ENTRY_SEMANTICS
 
     entries = entry_points(real_graph)
 

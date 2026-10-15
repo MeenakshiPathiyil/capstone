@@ -27,15 +27,12 @@ from pathlib import Path
 
 import pytest
 
-from engine.connection_builder import (
-    build_capability_edges,
-    build_connections,
-    build_escalation_edges
+from attack_path.path_finder import (
+    find_attack_paths,
+    objective_targets
 )
-from attack_path.path_finder import entry_points, find_attack_paths, objective_targets
+from security_state_graph.semantics import entry_points
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
-from models.cloud_resource import CloudResource
-from models.infra_model import InfraModel
 from parser.nested import parse_merged
 
 

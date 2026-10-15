@@ -145,7 +145,7 @@ CloudFormationLoader.add_multi_constructor('!', unknown_constructor)
 
 
 def load_cloudformation_template(file_path):
-    
+
     # Load and parse a CloudFormation YAML template with error handling.
     try:
         with open(file_path, "r") as file:
@@ -155,16 +155,16 @@ def load_cloudformation_template(file_path):
         raise FileNotFoundError(
             f"CloudFormation template not found: {file_path}\n"
             f"Please ensure the file exists at the specified path."
-        )
+        ) from None
     except yaml.YAMLError as e:
         raise ValueError(
             f"Invalid YAML syntax in {file_path}:\n{e}\n"
             f"Please check the file for syntax errors."
-        )
+        ) from e
     except Exception as e:
         raise RuntimeError(
             f"Unexpected error loading {file_path}: {e}"
-        )
+        ) from e
 
 
 def normalize_scalar(value):

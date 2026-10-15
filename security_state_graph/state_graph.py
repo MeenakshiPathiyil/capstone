@@ -1,6 +1,5 @@
 """Join the infrastructure model to the security findings."""
 
-import json
 from pathlib import Path
 
 from engine.connection_builder import DATA_TYPES, IAM_PRINCIPAL_TYPES

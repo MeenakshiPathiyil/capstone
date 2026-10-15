@@ -12,13 +12,8 @@ time the ruleset grew.
 """
 
 from security_state_graph.semantics import (
-    DEFAULT_SEVERITY_WEIGHT,
     EXPOSURE_SEMANTIC,
-    SEVERITY_BY_SEMANTIC,
-    SEVERITY_WEIGHTS,
-    finding_severity,
-    finding_weight,
-    severity_weight
+    finding_weight
 )
 from utils.helpers import flatten_dict
 

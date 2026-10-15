@@ -3,52 +3,20 @@
 import yaml
 from pathlib import Path
 
-from engine.connection_builder import DATA_TYPES
-from security_state_graph.facts import (
-    CREDENTIAL,
-    DATA_ACCESS,
-    FOOTHOLD,
-    INTERNET_REACHABLE
-)
 from security_state_graph.semantics import (
     AUTHORITY_SEMANTICS,
-    DEFAULT_SEVERITY_WEIGHT,
-    SEVERITY_BY_SEMANTIC,
-    SEVERITY_WEIGHTS,
-
-    ENTRY_SEMANTICS,
-    EXPOSURE_SEMANTIC,
-    NON_PATH_SEMANTICS,
-    NON_PATH_SOURCE_IDS,
-    PRIVILEGE_SEMANTIC,
-    data_targets,
     entry_points,
     finding_severity,
-    finding_weight,
     has_any_semantic,
-    has_semantic,
-    is_path_relevant,
-    severity_weight
+    has_semantic
 )
-from security_state_graph.facts import fact, facts_after, precondition_met
+from security_state_graph.facts import facts_after, precondition_met
 from attack_path.scoring import (
-    ATTACK_LEVEL_CRITICAL,
-    ATTACK_LEVEL_HIGH,
-    ATTACK_LEVEL_MEDIUM,
-    ATTACK_LEVELS,
-    CRITICAL_SCORE_THRESHOLD,
-    HIGH_SCORE_THRESHOLD,
-    LENGTH_DAMPING_PER_HOP,
-    PUBLIC_ENTRY_BOOST,
-    PUBLIC_EXPOSURE_VALUES,
     attack_level_for,
     is_public_entry,
-    path_severity_total,
-    score_path,
-    select_high_risk
+    score_path
 )
 from security_state_graph.state_graph import INFRA_PATH, RULES_PATH, build_state_graph
-from utils.helpers import flatten_dict
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -56,17 +24,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # What an attacker is trying to achieve. See the THEORY note in the file itself
 # for why the endpoint is a set of objectives rather than one hardcoded list.
 OBJECTIVES_PATH = BASE_DIR / "data" / "objectives.yaml"
-
-
-# AUTHORITY means the finding is the attacker gaining rights they did not have.
-# One of these has to appear on an interior hop before a path that needs
-# privilege is reported. See is_exploitable.
-AUTHORITY_SEMANTICS = [
-    PRIVILEGE_SEMANTIC,
-    "identity",
-    "trust",
-    "capability"
-]
 
 
 # Hops, not nodes: a path of MAX_DEPTH hops visits MAX_DEPTH + 1 resources.

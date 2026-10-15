@@ -97,7 +97,7 @@ def test_no_state_is_deeper_than_the_bound(attack_graph):
 
 
 def test_entry_states_are_the_state_graph_entry_points(attack_graph, real_graph):
-    from attack_path.path_finder import entry_points
+    from security_state_graph.semantics import entry_points
 
     entries = {
         node["resource"]

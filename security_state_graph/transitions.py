@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-from security_state_graph.facts import SOURCE, TARGET, fact, resolve
+from security_state_graph.facts import SOURCE, TARGET, resolve
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent

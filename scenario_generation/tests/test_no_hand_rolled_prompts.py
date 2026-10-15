@@ -12,7 +12,6 @@ from .conftest import (
     NOTEBOOKS,
     PROMPT_GENERATOR_MODULE,
     REPO_ROOT,
-    ROOT_MODULES,
     scanned_python_files,
 )
 

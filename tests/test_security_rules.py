@@ -991,13 +991,13 @@ def test_every_semantic_has_a_path_role(rules_path):
     canonical file.
     """
 
-    from attack_path.path_finder import (
+    from security_state_graph.semantics import (
         AUTHORITY_SEMANTICS,
         ENTRY_SEMANTICS,
         SEVERITY_BY_SEMANTIC
     )
 
-    from attack_path.path_finder import NON_PATH_SEMANTICS
+    from security_state_graph.semantics import NON_PATH_SEMANTICS
 
     classified = (
         set(ENTRY_SEMANTICS) | set(AUTHORITY_SEMANTICS) | set(NON_PATH_SEMANTICS)
@@ -1033,7 +1033,10 @@ def test_the_ruleset_can_produce_a_path_at_all(rules_path):
     what the canonical set does on its own, and why our five rules are kept.
     """
 
-    from attack_path.path_finder import AUTHORITY_SEMANTICS, ENTRY_SEMANTICS
+    from security_state_graph.semantics import (
+        AUTHORITY_SEMANTICS,
+        ENTRY_SEMANTICS
+    )
 
     semantics = {rule["semantic"] for rule in load_rules(rules_path)}
 
@@ -1184,7 +1187,7 @@ def test_scoping_the_existing_rule_did_not_lose_the_real_finding(
     # not by the blocked-port rule. Asserted per check rather than together,
     # because "some ingress rule fired on both groups" would pass even if the
     # scoping had collapsed one of them.
-    from attack_path.path_finder import finding_severity
+    from security_state_graph.semantics import finding_severity
 
     by_check = {
         "RESTRICTED_INCOMING_TRAFFIC": ["OpenSecurityGroup"],
@@ -1262,7 +1265,7 @@ def test_real_findings_carry_the_fields_the_graph_joins_on(
     rules_path,
     real_resource_dicts
 ):
-    from attack_path.path_finder import finding_severity
+    from security_state_graph.semantics import finding_severity
 
     resource_ids = {resource["id"] for resource in real_resource_dicts}
     source_ids = {rule["source_id"] for rule in load_rules(rules_path)}
@@ -1285,7 +1288,10 @@ def test_real_dataset_can_supply_both_halves_of_a_path(
 ):
     """The minimum shape an attack path needs: something to enter through and"""
 
-    from attack_path.path_finder import AUTHORITY_SEMANTICS, ENTRY_SEMANTICS
+    from security_state_graph.semantics import (
+        AUTHORITY_SEMANTICS,
+        ENTRY_SEMANTICS
+    )
 
     findings = all_findings(rules_path, real_resource_dicts)
 

@@ -288,7 +288,7 @@ def save_outputs(entries: list, out_dir: str):
     print(f"    → individual JSONs : {individual_dir}/")
     print(f"    → combined JSONL   : {jsonl_path}")
     print(f"    → summary stats    : {summary_path}")
-    print(f"\n[+] Summary:")
+    print("\n[+] Summary:")
     print(json.dumps(summary, indent=4))
 
 
@@ -328,7 +328,7 @@ def main():
         return
 
     save_outputs(entries, args.out)
-    print(f"\n[✓] Done. Next step: run generate_outputs.py on training_inputs.jsonl")
+    print("\n[✓] Done. Next step: run generate_outputs.py on training_inputs.jsonl")
 
 
 if __name__ == "__main__":

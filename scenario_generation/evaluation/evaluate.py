@@ -23,6 +23,10 @@ import json
 import sys
 import gc
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from transformers import BitsAndBytesConfig
 
 # Shared with training, so the eval prompt is the one the adapter was trained on
 # and the records are the ones it never saw.

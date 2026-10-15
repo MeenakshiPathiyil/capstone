@@ -216,10 +216,8 @@ def test_every_tactic_is_one_the_matrix_names(rules):
     from pathlib import Path
 
     catalog = yaml.safe_load(
-        open(
-            Path(__file__).resolve().parent.parent / "data" / "attack_techniques.yaml",
-            encoding="utf-8"
-        )
+        (Path(__file__).resolve().parent.parent / "data" / "attack_techniques.yaml")
+        .read_text(encoding="utf-8")
     )
 
     known = set(catalog["tactics"])

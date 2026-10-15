@@ -19,7 +19,6 @@ MAX_STATES is a stop, not a tuning knob: reaching it reports the graph truncated
 rather than leaving it quietly partial.
 """
 
-import json
 from pathlib import Path
 
 from security_state_graph.facts import (

@@ -6,7 +6,6 @@ used to hold a second precondition table keyed by edge category, and the two
 disagreed. See docs/adr/0002-one-home-for-conditions.md.
 """
 
-import pytest
 
 from security_state_graph.facts import (
     CREDENTIAL,

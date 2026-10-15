@@ -257,7 +257,7 @@ def save_results_txt(results: list[dict], path: Path):
             f.write(f"ATTACK PATH  : {r['attack_path_id']} | {r['industry']} | LEVEL: {r['attack_level']}\n")
             f.write(f"TECHNIQUES   : {r['techniques']}\n")
             f.write(f"SURFACES     : {r['surfaces']}\n")
-            f.write(f"\n--- GENERATED SCENARIO ---\n\n")
+            f.write("\n--- GENERATED SCENARIO ---\n\n")
             f.write(r["generated_scenario"])
             f.write(f"\n\n{sep}\n\n")
     print(f"[✓] TXT saved  → {path}")

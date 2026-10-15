@@ -5,12 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from attack_path.path_finder import (
+from security_state_graph.semantics import (
     ENTRY_SEMANTICS,
     data_targets,
     entry_points,
     finding_severity,
-    finding_weight,
     severity_weight
 )
 from security_state_graph.state_graph import (
@@ -25,10 +24,7 @@ from security_state_graph.state_graph import (
     SecurityStateGraph,
     build_state_graph,
     edge_sort_key,
-    entry_reason,
     evaluate_findings,
-    highest_severity,
-    sorted_edges,
     write_state_graph
 )
 
