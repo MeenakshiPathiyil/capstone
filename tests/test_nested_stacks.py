@@ -23,7 +23,6 @@ one. The second assertion alone would pass on a merge that silently concatenated
 without resolving anything, so the first is what gives it meaning.
 """
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -37,6 +36,7 @@ from attack_path.path_finder import entry_points, find_attack_paths, objective_t
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
 from models.cloud_resource import CloudResource
 from models.infra_model import InfraModel
+from parser.nested import parse_merged
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,10 +45,6 @@ FIXTURE_DIR = BASE_DIR / "tests" / "fixtures" / "nested"
 PARENT = FIXTURE_DIR / "parent.yaml"
 
 RULES_PATH = BASE_DIR / "data" / "security_rules.yaml"
-
-# The stage-0 parser is a sibling checkout, not a package — the same reason
-# runner/benchmark.py has to locate it rather than import it directly.
-PARSER_REPO = Path.home() / "Downloads" / "capstone-feature-yaml-parser-normalization"
 
 # The hops the merged account must produce, in the merged namespace. Written out
 # because the namespacing is the part most likely to break quietly: an id that
@@ -61,23 +57,6 @@ EXPECTED_HOPS = [
     "Web.WebRole",
     "Data.ReportsBucket"
 ]
-
-
-requires_parser = pytest.mark.skipif(
-    not (PARSER_REPO / "parser" / "nested.py").exists(),
-    reason="stage-0 parser checkout not present"
-)
-
-
-def load_nested():
-    """parse_merged from the sibling parser checkout."""
-
-    if str(PARSER_REPO) not in sys.path:
-        sys.path.insert(0, str(PARSER_REPO))
-
-    from parser.nested import parse_merged  # noqa: E402 - path set above
-
-    return parse_merged
 
 
 def graph_from(records):
@@ -99,7 +78,7 @@ def graph_from(records):
 
 @pytest.fixture
 def merged():
-    records, report = load_nested()(PARENT, root=FIXTURE_DIR)
+    records, report = parse_merged(PARENT, root=FIXTURE_DIR)
     return records, report
 
 
@@ -107,7 +86,6 @@ def merged():
 def unmerged():
     """Each child parsed on its own, the way single-file analysis sees them."""
 
-    parse_merged = load_nested()
 
     return {
         path.stem: parse_merged(path, root=FIXTURE_DIR, follow_stacks=False)[0]
@@ -118,7 +96,6 @@ def unmerged():
 
 # -----------------------------
 
-@requires_parser
 def test_no_single_file_contains_an_attack_path(unmerged):
     """THE HALF THAT GIVES THE OTHER HALF MEANING.
 
@@ -133,7 +110,6 @@ def test_no_single_file_contains_an_attack_path(unmerged):
         assert paths == [], "%s produced a path on its own" % name
 
 
-@requires_parser
 def test_every_child_stack_is_merged(merged):
     records, report = merged
 
@@ -143,7 +119,6 @@ def test_every_child_stack_is_merged(merged):
     assert len(records) > 0
 
 
-@requires_parser
 def test_ids_are_namespaced_by_their_stack(merged):
     """Logical ids are only unique within a template, so a merge that keeps them
     bare lets two children collide."""
@@ -159,7 +134,6 @@ def test_ids_are_namespaced_by_their_stack(merged):
     assert "WebRole" not in ids
 
 
-@requires_parser
 def test_the_cross_stack_parameter_is_resolved(merged):
     """web.yaml names its group by parameter; the parent passes
     !GetAtt Network.Outputs.OpenGroup. Unresolved, the web tier is an island."""
@@ -171,7 +145,6 @@ def test_the_cross_stack_parameter_is_resolved(merged):
     assert instance["raw_properties"]["SecurityGroupIds"] == ["Network.OpenGroup"]
 
 
-@requires_parser
 def test_the_merged_account_has_the_entry_and_the_target(merged):
     records, _ = merged
     state_graph = graph_from(records)
@@ -180,7 +153,6 @@ def test_the_merged_account_has_the_entry_and_the_target(merged):
     assert "Data.ReportsBucket" in objective_targets(state_graph)
 
 
-@requires_parser
 def test_the_merged_account_yields_the_cross_file_path(merged):
     """THE HEADLINE ASSERTION: the chain exists only once the files are merged."""
 
@@ -193,7 +165,6 @@ def test_the_merged_account_yields_the_cross_file_path(merged):
     assert EXPECTED_HOPS in [path["hops"] for path in paths]
 
 
-@requires_parser
 def test_the_cross_file_path_is_a_data_theft_path(merged):
     """Not merely reachable — an objective an attacker would actually pursue, with
     the escalation on an interior hop."""
@@ -217,12 +188,10 @@ def test_the_cross_file_path_is_a_data_theft_path(merged):
     assert theft["score"] > 0
 
 
-@requires_parser
 def test_a_cycle_does_not_recurse_forever(tmp_path):
     """A template that includes itself terminates and is reported, rather than
     running until the interpreter gives up."""
 
-    parse_merged = load_nested()
 
     (tmp_path / "loop.yaml").write_text(
         "AWSTemplateFormatVersion: \"2010-09-09\"\n"
@@ -238,13 +207,11 @@ def test_a_cycle_does_not_recurse_forever(tmp_path):
     assert any(entry["reason"] == "cycle" for entry in report["skipped"])
 
 
-@requires_parser
 def test_an_unresolvable_template_url_is_reported_not_guessed(tmp_path):
     """A child that is not on disk leaves a boundary the graph could not cross,
     and says so. Inventing a node for it would put a resource in the graph that
     the account does not contain."""
 
-    parse_merged = load_nested()
 
     (tmp_path / "top.yaml").write_text(
         "AWSTemplateFormatVersion: \"2010-09-09\"\n"

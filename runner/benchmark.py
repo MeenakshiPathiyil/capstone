@@ -66,6 +66,11 @@ from attack_path.path_finder import find_attack_paths
 from security_state_graph.state_graph import SecurityStateGraph, evaluate_findings
 from models.cloud_resource import CloudResource
 from models.infra_model import InfraModel
+from parser.infra_parser import (
+    extract_semantic_properties,
+    flatten_properties,
+    load_cloudformation_template
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -114,47 +119,7 @@ except ValueError:  # pragma: no cover - not the main thread
     pass
 
 
-# Where the stage-0 parser lives. A sibling checkout rather than a package: the
-# two halves are separate branches of one repo, so there is no import path that
-# reaches it and the location has to be configurable.
-PARSER_REPO = Path.home() / "Downloads" / "capstone-feature-yaml-parser-normalization"
-
-
-def load_parser(repo=PARSER_REPO):
-    """The stage-0 parser's module, imported.
-
-    This used to exec() the source with the module body sliced off, because
-    infra_parser.py read a hardcoded input file at import time and could not be
-    imported at all. It now exposes `parse()` behind a __main__ guard, so this is
-    an import — which also means the benchmark exercises the same code path the
-    parser's own CLI does, rather than a reconstruction of it.
-    """
-
-    repo = Path(repo)
-
-    if not (repo / "parser" / "infra_parser.py").exists():
-        raise FileNotFoundError(
-            "The stage-0 parser was not found at %s. The benchmark needs it to "
-            "read real templates." % repo
-        )
-
-    if str(repo) not in sys.path:
-        sys.path.insert(0, str(repo))
-
-    from parser.infra_parser import (          # noqa: E402 - path set above
-        extract_semantic_properties,
-        flatten_properties,
-        load_cloudformation_template
-    )
-
-    return (
-        load_cloudformation_template,
-        flatten_properties,
-        extract_semantic_properties
-    )
-
-
-def normalize_template(data, flatten, extract):
+def normalize_template(data):
     """A parsed template as the normalized resource dicts the pipeline reads."""
 
     resources = []
@@ -170,7 +135,7 @@ def normalize_template(data, flatten, extract):
             raw = {}
 
         try:
-            semantic = extract(flatten(raw), body["Type"])
+            semantic = extract_semantic_properties(flatten_properties(raw), body["Type"])
         except Exception:
             continue
 
@@ -249,8 +214,6 @@ def run(corpus=DEFAULT_CORPUS, limit=None, rules_path=RULES_PATH):
     if not manifest.exists():
         raise FileNotFoundError("No %s in %s" % (MANIFEST, corpus))
 
-    load, flatten, extract = load_parser()
-
     rows = list(csv.DictReader(open(manifest)))
 
     if limit:
@@ -286,7 +249,7 @@ def run(corpus=DEFAULT_CORPUS, limit=None, rules_path=RULES_PATH):
 
         try:
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                data = load(str(path))
+                data = load_cloudformation_template(str(path))
         except Exception:
             counts["parse_failed"] += 1
             continue
@@ -295,7 +258,7 @@ def run(corpus=DEFAULT_CORPUS, limit=None, rules_path=RULES_PATH):
             counts["no_resources"] += 1
             continue
 
-        resources = normalize_template(data, flatten, extract)
+        resources = normalize_template(data)
 
         if not resources:
             counts["no_resources"] += 1

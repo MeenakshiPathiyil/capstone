@@ -31,9 +31,8 @@ def build_infra_from_resources(resource_dicts):
     infra = InfraModel()
 
     # The abstract vocabulary the ruleset is written against. Projected here and
-    # not left to the caller, because data/normalized_resources.json predates
-    # projection and every canonical rule resolves nothing without it. Records
-    # the parser already projected pass through untouched.
+    # not left to the caller, because the parser emits raw properties only and
+    # every canonical rule resolves nothing without it.
     resource_dicts = project_all(resource_dicts)
 
     # Step 1: Create resources

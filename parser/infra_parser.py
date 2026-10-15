@@ -14,7 +14,7 @@ import yaml
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEFAULT_INPUT = BASE_DIR / "sample_yamls" / "cloudformation5.yml"
-DEFAULT_OUTPUT = BASE_DIR / "normalized_resources.json"
+DEFAULT_OUTPUT = BASE_DIR / "data" / "normalized_resources.json"
 
 # Explicit mappings for common cloud fields
 KNOWN_FIELD_SEMANTICS = {
@@ -345,35 +345,12 @@ def normalize(data):
     return normalized_resources
 
 
-def parse(path=DEFAULT_INPUT, project=True):
+def parse(path=DEFAULT_INPUT):
     """A CloudFormation template on disk as normalized resource records.
 
-    With `project`, each record also carries an `attributes` block: the abstract
-    vocabulary the rules are written against (`ingress.port`, `bucket.name`,
-    `StorageEncrypted`). See parser/attributes.py for why that indirection exists.
-    Projection is a second pass because two of the facts a bucket rule asks about
-    live on a different resource, so it needs the whole template.
-    """
-
-    records = normalize(
-        validate_template(
-            load_cloudformation_template(str(path))
-        )
-    )
-
-    if not project:
-        return records
-
-    from parser.attributes import project_all
-
-    return project_all(records)
-
-
-def _parse_unprojected(path=DEFAULT_INPUT):
-    """A CloudFormation template on disk as normalized resource records.
-
-    The one entry point worth importing. Everything above is a helper, and the
-    module body no longer does anything, so importing this file is free.
+    The one entry point worth importing. The abstract `attributes` the rules
+    read are projected later, by processing/attributes.py, when the pipeline
+    builds its infrastructure model.
     """
 
     return normalize(
@@ -388,8 +365,9 @@ def write(records, path=DEFAULT_OUTPUT):
 
     Path(path).parent.mkdir(parents=True, exist_ok=True)
 
-    with open(path, "w") as handle:
+    with open(path, "w", encoding="utf-8") as handle:
         json.dump(records, handle, indent=2)
+        handle.write("\n")
 
     return path
 

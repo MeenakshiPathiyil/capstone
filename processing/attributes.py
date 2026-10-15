@@ -17,9 +17,6 @@ Not done: intrinsic functions (`!Ref Foo` is already the string "Foo" by now,
 `!GetAtt` and `Fn::Sub` are not resolved), cross-account reasoning, and policy
 documents built by `Fn::Join`, whose conclusions come out False rather than
 guessed at.
-
-The canonical copy of this module is parser/attributes.py on the parser branch.
-tests/test_attributes.py compares the two when both are checked out.
 """
 
 
@@ -465,21 +462,9 @@ def project(resource, records=None):
 
 
 def project_all(records):
-    """Every record with an `attributes` block added. Returns a new list.
+    """Every record with an `attributes` block added. Returns a new list."""
 
-    A record that already carries `attributes` keeps them: the parser branch
-    projects on the way out, and re-projecting would throw away anything a
-    provider knew that this copy does not.
-    """
-
-    projected = []
-
-    for record in records:
-
-        if record.get("attributes"):
-            projected.append(record)
-            continue
-
-        projected.append(dict(record, attributes=project(record, records)))
-
-    return projected
+    return [
+        dict(record, attributes=project(record, records))
+        for record in records
+    ]
