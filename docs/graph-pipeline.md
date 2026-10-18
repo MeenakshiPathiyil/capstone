@@ -16,7 +16,7 @@ python3 -m runner.graph_runner
 ```
 
 ```
-Done. 15 resources, 16 edges, 21 security findings, 22 attack paths.
+Done. 15 resources, 16 edges, 22 security findings, 22 attack paths.
 Attack graph: 22 attacker states, 19 actions, 7 distinct ATT&CK techniques.
   AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
   ...
@@ -25,7 +25,7 @@ Attack graph: 22 attacker states, 19 actions, 7 distinct ATT&CK techniques.
 19 of the 22 paths are exported: the three MEDIUM ones are left out.
 
 `python3 main.py` builds and saves the connection graph alone;
-`python3 -m runner.rule_runner` writes the 21 findings alone, to
+`python3 -m runner.rule_runner` writes the 22 findings alone, to
 `output/output_states.json`.
 
 ## External sources
@@ -78,9 +78,9 @@ so the diagram survives a greyscale print.
 
 | | Before | After |
 |---|---|---|
-| Rules | 1 | 20 |
+| Rules | 1 | 21 |
 | Escalation methods in the catalogue | 0 | 28 |
-| Findings | 1 | 21 |
+| Findings | 1 | 22 |
 | Edges | 1 | 16 |
 | Ranked attack paths | 0 | 22 (19 exported) |
 | Attack objectives | 1 (implicit) | 5 |

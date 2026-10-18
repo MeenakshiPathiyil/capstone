@@ -91,7 +91,7 @@ HAND_WRITTEN_FINDINGS = [
     {
         "resource": "SampleSecurityGroup",
         "rule_id": "RESTRICTED_COMMON_PORTS",
-        "state": "unrestricted_common_port_access",
+        "state": "sg_unrestricted_common_port",
         "semantic": "exposure",
         "severity": "high"
     }
@@ -144,7 +144,7 @@ def test_state_lands_on_the_correct_node(real_graph):
     ever on a security group.
     """
 
-    assert "unrestricted_common_port_access" in state_ids(
+    assert "sg_unrestricted_common_port" in state_ids(
         real_graph,
         "OpenSecurityGroup"
     )
@@ -154,7 +154,7 @@ def test_state_lands_on_the_correct_node(real_graph):
     # a finding on the wrong *kind* of resource is the join going wrong.
     for resource_id, node in real_graph.nodes.items():
 
-        if "unrestricted_common_port_access" in state_ids(real_graph, resource_id):
+        if "sg_unrestricted_common_port" in state_ids(real_graph, resource_id):
             assert node["type"] == "AWS::EC2::SecurityGroup"
 
 
@@ -686,12 +686,12 @@ def test_the_entry_reason_names_the_rule_that_made_it_one(real_graph):
         ", ".join([
             ENTRY_REASON_FINDING.format(
                 "aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup",
-                "unrestricted_common_port_access",
+                "sg_unrestricted_common_port",
                 "high"
             ),
             ENTRY_REASON_FINDING.format(
                 "aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup",
-                "unrestricted_ssh_access",
+                "sg_unrestricted_ssh",
                 "high"
             )
         ])

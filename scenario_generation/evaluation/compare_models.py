@@ -53,7 +53,7 @@ ATTACK_PATHS_DEFAULT = HERE / "inputs" / "attack_paths.json"
 
 # Both entry routes, all four objectives, and the one two-hop path. The ranked
 # top five would all start from the same security group.
-SAMPLE_PATH_IDS = ["AP-001", "AP-003", "AP-007", "AP-014", "AP-015"]
+SAMPLE_PATH_IDS = ["AP-001", "AP-002", "AP-007", "AP-014", "AP-015"]
 SEED = 42
 
 MLX_CACHE = Path.home() / ".cache" / "mlx-4bit"

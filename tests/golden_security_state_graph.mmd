@@ -1,18 +1,18 @@
 flowchart LR
-%% Security state graph: 15 resources, 16 edges, 21 findings, 7 entry points, 3 targets.
+%% Security state graph: 15 resources, 16 edges, 22 findings, 7 entry points, 3 targets.
 %% Render it with: mmdc -i output/security_state_graph.mmd -o security_state_graph.svg
 %% Diagram key in README.md. Arrows are the attacker's direction, so a network_control edge is labelled 'reversed'.
 %%
 %% Ranked attack paths, worst first (see output/attack_paths.json):
 %%   AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
-%%   AP-002  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
-%%   AP-003  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-002  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-003  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
 %%   AP-004  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
 %%   AP-005  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
 %%   AP-006  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole
 %%   AP-007  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
-%%   AP-008  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
-%%   AP-009  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-008  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-009  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
 %%   AP-010  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
 %%   AP-011  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
 %%   AP-012  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
@@ -53,8 +53,8 @@ flowchart LR
     n_IngestFunction -->|"trust"| n_DeploymentRole
     n_OpenSecurityGroup ==>|"network_control (reversed; AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012, AP-015)"| n_PublicEC2Instance
     n_OverPermissiveInstanceProfile ==>|"identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)"| n_OverPermissiveRole
-    n_OverPermissiveRole ==>|"capability (AP-001, AP-003, AP-007, AP-009)"| n_InsecureS3Bucket
-    n_OverPermissiveRole ==>|"capability (AP-002, AP-004, AP-005, AP-008, AP-010, AP-013)"| n_PublicRDS
+    n_OverPermissiveRole ==>|"capability (AP-001, AP-002, AP-007, AP-008)"| n_InsecureS3Bucket
+    n_OverPermissiveRole ==>|"capability (AP-003, AP-004, AP-005, AP-009, AP-010, AP-013)"| n_PublicRDS
     n_OverPermissiveRole ==>|"capability (AP-011, AP-012, AP-016, AP-017)"| n_ReportsTable
     n_PublicBucketPolicy -->|"connection"| n_InsecureS3Bucket
     n_PublicEC2Instance ==>|"identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)"| n_OverPermissiveInstanceProfile

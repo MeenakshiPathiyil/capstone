@@ -627,7 +627,7 @@ def test_the_shipped_ingress_rules_still_fire_on_the_real_dataset(
         if finding["source_id"] == "RESTRICTED_INCOMING_TRAFFIC"
     )
 
-    assert blocked["state"] == "unrestricted_common_port_access"
+    assert blocked["state"] == "sg_unrestricted_common_port"
     assert blocked["semantic"] == "network_control"
     assert finding_severity(blocked) == "high"
 
@@ -773,3 +773,14 @@ def test_equals_does_not_coerce():
         NUMERIC_RESOURCE,
         leaf("Protocol", "in", ["-1", -1])
     ) is True
+
+
+def test_not_in_over_a_list_checks_each_item():
+    """A list value is a set of things, such as every principal a policy grants.
+    One outsider is enough to match, and an empty list grants nothing."""
+
+    trusted = ["203.0.113.0/24"]
+
+    assert compare(["203.0.113.0/24", "*"], "not_in", trusted) is True
+    assert compare(["203.0.113.0/24"], "not_in", trusted) is False
+    assert compare([], "not_in", trusted) is False

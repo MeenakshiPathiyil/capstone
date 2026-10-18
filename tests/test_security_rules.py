@@ -46,7 +46,8 @@ CANONICAL_SOURCE_IDS = {
     "REQUIRED_TAGS",
     "IAM_PASSWORD_POLICY",
     "ROOT_ACCOUNT_MFA_ENABLED",
-    "CLOUD_TRAIL_ENABLED"
+    "CLOUD_TRAIL_ENABLED",
+    "S3_BUCKET_POLICY_GRANTEE_CHECK"
 }
 
 # Ours, kept because the canonical set has no equivalent. Deleting any of these
@@ -68,6 +69,10 @@ REQUIRED_SOURCE_IDS = CANONICAL_SOURCE_IDS | OUR_SOURCE_IDS
 # file so it stays a faithful copy of the canonical set, and skipped by the
 # fixture tests because there is no resource to write a fixture for.
 UNTESTABLE_RESOURCE_TYPES = {"account"}
+
+# Rules whose fact lives on a second resource, so a one-resource fixture pair
+# cannot exercise them. Each has its own two-resource tests below.
+TWO_RESOURCE_RULES = {"aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket"}
 
 # Lowercase on purpose: security_state_graph/semantics.py indexes a lowercase weight table.
 ALLOWED_SEVERITIES = {"critical", "high", "medium", "low"}
@@ -388,7 +393,10 @@ HARDENED_RESOURCES = {
                             "AWS": "arn:aws:iam::111122223333:role/ReportingRole"
                         },
                         "Action": "s3:GetObject",
-                        "Resource": "arn:aws:s3:::hardened-private-bucket/*"
+                        "Resource": "arn:aws:s3:::hardened-private-bucket/*",
+                        "Condition": {
+                            "IpAddress": {"aws:SourceIp": "203.0.113.0/24"}
+                        }
                     },
                     {
                         "Effect": "Deny",
@@ -887,6 +895,7 @@ def test_every_testable_rule_has_a_fixture_pair(rules_path):
         rule["id"]
         for rule in load_rules(rules_path)
         if rule.get("resource_type") not in UNTESTABLE_RESOURCE_TYPES
+        and rule["id"] not in TWO_RESOURCE_RULES
     }
 
     assert testable == set(FIXTURE_RULE_ID.values())
@@ -1451,3 +1460,78 @@ def test_every_rule_technique_name_matches_the_matrix(rules_path):
                 rule["id"],
                 technique["id"]
             )
+
+
+# -- S3_BUCKET_POLICY_GRANTEE_CHECK: a bucket and the policy that names it ------
+
+GRANTEE_RULE = "aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket"
+
+
+def bucket_with_policy(*statements):
+    """A private, tagged bucket and, when statements are given, a policy on it."""
+
+    bucket = {
+        "id": "GranteeBucket",
+        "type": "AWS::S3::Bucket",
+        "raw_properties": {
+            "BucketName": "grantee-bucket",
+            "PublicAccessBlockConfiguration": dict(BLOCKED_PUBLIC_ACCESS),
+            "Tags": REQUIRED_TAG
+        }
+    }
+
+    if not statements:
+        return [bucket]
+
+    policy = {
+        "id": "GranteeBucketPolicy",
+        "type": "AWS::S3::BucketPolicy",
+        "raw_properties": {
+            "Bucket": "GranteeBucket",
+            "PolicyDocument": {"Statement": list(statements)}
+        }
+    }
+
+    return [bucket, policy]
+
+
+def grantee_rule_fires(rules_path, resources):
+    return any(
+        finding["rule_id"] == GRANTEE_RULE and finding["resource"] == "GranteeBucket"
+        for finding in all_findings(rules_path, resources)
+    )
+
+
+def allow(principal, source_ip=None):
+    statement = {"Effect": "Allow", "Principal": principal, "Action": "s3:GetObject",
+                 "Resource": "arn:aws:s3:::grantee-bucket/*"}
+    if source_ip:
+        statement["Condition"] = {"IpAddress": {"aws:SourceIp": source_ip}}
+    return statement
+
+
+def test_the_grantee_rule_fires_on_a_policy_granting_everyone(rules_path):
+    assert grantee_rule_fires(rules_path, bucket_with_policy(allow("*")))
+
+
+def test_the_grantee_rule_fires_on_a_grant_from_an_untrusted_range(rules_path):
+    assert grantee_rule_fires(rules_path, bucket_with_policy(allow("*", "192.0.2.0/24")))
+
+
+def test_the_grantee_rule_ignores_a_grant_restricted_to_a_trusted_range(rules_path):
+    assert not grantee_rule_fires(rules_path, bucket_with_policy(
+        allow({"AWS": "arn:aws:iam::111122223333:root"}, ["203.0.113.0/24", "198.51.100.0/24"])))
+
+
+def test_a_deny_grants_nothing(rules_path):
+    """A Deny to everyone is the opposite of a grant and must not read as one."""
+
+    deny = {"Effect": "Deny", "Principal": "*", "Action": "s3:*",
+            "Resource": "arn:aws:s3:::grantee-bucket/*"}
+
+    assert not grantee_rule_fires(rules_path, bucket_with_policy(
+        allow("*", "203.0.113.0/24"), deny))
+
+
+def test_a_bucket_with_no_policy_grants_nothing(rules_path):
+    assert not grantee_rule_fires(rules_path, bucket_with_policy())

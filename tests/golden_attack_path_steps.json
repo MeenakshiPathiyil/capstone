@@ -4,7 +4,7 @@
     "entry_id": "OpenSecurityGroup",
     "target_id": "InsecureS3Bucket",
     "objective": "ransomware",
-    "risk_score": 51.43,
+    "risk_score": 56.04,
     "attack_level": "CRITICAL",
     "steps": [
       {
@@ -170,6 +170,174 @@
   {
     "source_id": "AP-002",
     "entry_id": "OpenSecurityGroup",
+    "target_id": "InsecureS3Bucket",
+    "objective": "data_theft",
+    "risk_score": 55.27,
+    "attack_level": "CRITICAL",
+    "steps": [
+      {
+        "source": "OpenSecurityGroup",
+        "target": "PublicEC2Instance",
+        "category": "network_control",
+        "relation": "association",
+        "action_id": "ACT_REACH_EXPOSED_ADMIN_SERVICE",
+        "action": "Reach an administrative service exposed to the internet",
+        "tactic": "initial access",
+        "technique": "T1190",
+        "precondition": [
+          "internet_reachable"
+        ],
+        "precondition_options": [
+          "internet_reachable"
+        ],
+        "required_capabilities": [
+          {
+            "end": "source",
+            "source_id": [
+              "INCOMING_SSH_DISABLED"
+            ]
+          }
+        ],
+        "required_permissions": [],
+        "postcondition": [
+          "foothold(PublicEC2Instance)"
+        ],
+        "input": {
+          "target": "PublicEC2Instance",
+          "target_type": "AWS::EC2::Instance",
+          "security_group": "OpenSecurityGroup",
+          "exposed_cidr": [
+            "0.0.0.0/0"
+          ],
+          "exposed_ports": [
+            22,
+            3389
+          ],
+          "evidence": [
+            "RESTRICTED_INCOMING_TRAFFIC",
+            "INCOMING_SSH_DISABLED"
+          ]
+        },
+        "output": {
+          "session": "PublicEC2Instance",
+          "access": "interactive shell"
+        },
+        "fallback": false
+      },
+      {
+        "source": "PublicEC2Instance",
+        "target": "OverPermissiveInstanceProfile",
+        "category": "identity",
+        "relation": "dependency",
+        "action_id": "ACT_READ_INSTANCE_METADATA",
+        "action": "Read role credentials from the instance metadata service",
+        "tactic": "credential access",
+        "technique": "T1552.005",
+        "precondition": [
+          "foothold(PublicEC2Instance)"
+        ],
+        "precondition_options": [
+          "foothold(PublicEC2Instance)"
+        ],
+        "required_capabilities": [
+          {
+            "end": "source",
+            "state": [
+              "instance_metadata_service_v1_enabled"
+            ]
+          }
+        ],
+        "required_permissions": [],
+        "postcondition": [
+          "credential(OverPermissiveInstanceProfile)"
+        ],
+        "input": {
+          "instance": "PublicEC2Instance",
+          "profile": "OverPermissiveInstanceProfile",
+          "metadata_service_version": "v1",
+          "evidence": [
+            "EC2_IMDSV1_ENABLED"
+          ]
+        },
+        "output": {
+          "credential": "OverPermissiveInstanceProfile",
+          "credential_type": "temporary session credentials"
+        },
+        "fallback": false
+      },
+      {
+        "source": "OverPermissiveInstanceProfile",
+        "target": "OverPermissiveRole",
+        "category": "identity",
+        "relation": "dependency",
+        "action_id": "ACT_USE_ATTACHED_IDENTITY",
+        "action": "Use an attached identity",
+        "tactic": "lateral movement",
+        "technique": "T1550",
+        "precondition": [
+          "credential(OverPermissiveInstanceProfile)"
+        ],
+        "precondition_options": [
+          "foothold(OverPermissiveInstanceProfile)",
+          "credential(OverPermissiveInstanceProfile)"
+        ],
+        "required_capabilities": [],
+        "required_permissions": [],
+        "postcondition": [
+          "credential(OverPermissiveRole)"
+        ],
+        "input": {
+          "from": "OverPermissiveInstanceProfile",
+          "identity": "OverPermissiveRole",
+          "identity_type": "AWS::IAM::Role"
+        },
+        "output": {
+          "credential": "OverPermissiveRole"
+        },
+        "fallback": false
+      },
+      {
+        "source": "OverPermissiveRole",
+        "target": "InsecureS3Bucket",
+        "category": "capability",
+        "relation": "capability",
+        "action_id": "ACT_READ_CLOUD_STORAGE",
+        "action": "Read data from cloud storage",
+        "tactic": "collection",
+        "technique": "T1530",
+        "precondition": [
+          "credential(OverPermissiveRole)"
+        ],
+        "precondition_options": [
+          "credential(OverPermissiveRole)"
+        ],
+        "required_capabilities": [],
+        "required_permissions": [],
+        "postcondition": [
+          "data_access(InsecureS3Bucket)"
+        ],
+        "input": {
+          "identity": "OverPermissiveRole",
+          "store": "InsecureS3Bucket",
+          "bucket_name": [
+            "insecure-public-bucket-demo"
+          ],
+          "evidence": [
+            "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
+            "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+          ]
+        },
+        "output": {
+          "data_access": "InsecureS3Bucket",
+          "data_kind": "object storage"
+        },
+        "fallback": false
+      }
+    ]
+  },
+  {
+    "source_id": "AP-003",
+    "entry_id": "OpenSecurityGroup",
     "target_id": "PublicRDS",
     "objective": "ransomware",
     "risk_score": 51.43,
@@ -328,174 +496,6 @@
         "output": {
           "data_access": "PublicRDS",
           "data_kind": "structured records"
-        },
-        "fallback": false
-      }
-    ]
-  },
-  {
-    "source_id": "AP-003",
-    "entry_id": "OpenSecurityGroup",
-    "target_id": "InsecureS3Bucket",
-    "objective": "data_theft",
-    "risk_score": 50.67,
-    "attack_level": "CRITICAL",
-    "steps": [
-      {
-        "source": "OpenSecurityGroup",
-        "target": "PublicEC2Instance",
-        "category": "network_control",
-        "relation": "association",
-        "action_id": "ACT_REACH_EXPOSED_ADMIN_SERVICE",
-        "action": "Reach an administrative service exposed to the internet",
-        "tactic": "initial access",
-        "technique": "T1190",
-        "precondition": [
-          "internet_reachable"
-        ],
-        "precondition_options": [
-          "internet_reachable"
-        ],
-        "required_capabilities": [
-          {
-            "end": "source",
-            "source_id": [
-              "INCOMING_SSH_DISABLED"
-            ]
-          }
-        ],
-        "required_permissions": [],
-        "postcondition": [
-          "foothold(PublicEC2Instance)"
-        ],
-        "input": {
-          "target": "PublicEC2Instance",
-          "target_type": "AWS::EC2::Instance",
-          "security_group": "OpenSecurityGroup",
-          "exposed_cidr": [
-            "0.0.0.0/0"
-          ],
-          "exposed_ports": [
-            22,
-            3389
-          ],
-          "evidence": [
-            "RESTRICTED_INCOMING_TRAFFIC",
-            "INCOMING_SSH_DISABLED"
-          ]
-        },
-        "output": {
-          "session": "PublicEC2Instance",
-          "access": "interactive shell"
-        },
-        "fallback": false
-      },
-      {
-        "source": "PublicEC2Instance",
-        "target": "OverPermissiveInstanceProfile",
-        "category": "identity",
-        "relation": "dependency",
-        "action_id": "ACT_READ_INSTANCE_METADATA",
-        "action": "Read role credentials from the instance metadata service",
-        "tactic": "credential access",
-        "technique": "T1552.005",
-        "precondition": [
-          "foothold(PublicEC2Instance)"
-        ],
-        "precondition_options": [
-          "foothold(PublicEC2Instance)"
-        ],
-        "required_capabilities": [
-          {
-            "end": "source",
-            "state": [
-              "instance_metadata_service_v1_enabled"
-            ]
-          }
-        ],
-        "required_permissions": [],
-        "postcondition": [
-          "credential(OverPermissiveInstanceProfile)"
-        ],
-        "input": {
-          "instance": "PublicEC2Instance",
-          "profile": "OverPermissiveInstanceProfile",
-          "metadata_service_version": "v1",
-          "evidence": [
-            "EC2_IMDSV1_ENABLED"
-          ]
-        },
-        "output": {
-          "credential": "OverPermissiveInstanceProfile",
-          "credential_type": "temporary session credentials"
-        },
-        "fallback": false
-      },
-      {
-        "source": "OverPermissiveInstanceProfile",
-        "target": "OverPermissiveRole",
-        "category": "identity",
-        "relation": "dependency",
-        "action_id": "ACT_USE_ATTACHED_IDENTITY",
-        "action": "Use an attached identity",
-        "tactic": "lateral movement",
-        "technique": "T1550",
-        "precondition": [
-          "credential(OverPermissiveInstanceProfile)"
-        ],
-        "precondition_options": [
-          "foothold(OverPermissiveInstanceProfile)",
-          "credential(OverPermissiveInstanceProfile)"
-        ],
-        "required_capabilities": [],
-        "required_permissions": [],
-        "postcondition": [
-          "credential(OverPermissiveRole)"
-        ],
-        "input": {
-          "from": "OverPermissiveInstanceProfile",
-          "identity": "OverPermissiveRole",
-          "identity_type": "AWS::IAM::Role"
-        },
-        "output": {
-          "credential": "OverPermissiveRole"
-        },
-        "fallback": false
-      },
-      {
-        "source": "OverPermissiveRole",
-        "target": "InsecureS3Bucket",
-        "category": "capability",
-        "relation": "capability",
-        "action_id": "ACT_READ_CLOUD_STORAGE",
-        "action": "Read data from cloud storage",
-        "tactic": "collection",
-        "technique": "T1530",
-        "precondition": [
-          "credential(OverPermissiveRole)"
-        ],
-        "precondition_options": [
-          "credential(OverPermissiveRole)"
-        ],
-        "required_capabilities": [],
-        "required_permissions": [],
-        "postcondition": [
-          "data_access(InsecureS3Bucket)"
-        ],
-        "input": {
-          "identity": "OverPermissiveRole",
-          "store": "InsecureS3Bucket",
-          "bucket_name": [
-            "insecure-public-bucket-demo"
-          ],
-          "evidence": [
-            "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
-            "S3_BUCKET_PUBLIC_READ_PROHIBITED"
-          ]
-        },
-        "output": {
-          "data_access": "InsecureS3Bucket",
-          "data_kind": "object storage"
         },
         "fallback": false
       }
@@ -969,7 +969,7 @@
     "entry_id": "AppSecurityGroup",
     "target_id": "InsecureS3Bucket",
     "objective": "ransomware",
-    "risk_score": 42.71,
+    "risk_score": 46.03,
     "attack_level": "CRITICAL",
     "steps": [
       {
@@ -1209,6 +1209,248 @@
   {
     "source_id": "AP-008",
     "entry_id": "AppSecurityGroup",
+    "target_id": "InsecureS3Bucket",
+    "objective": "data_theft",
+    "risk_score": 45.48,
+    "attack_level": "CRITICAL",
+    "steps": [
+      {
+        "source": "AppSecurityGroup",
+        "target": "AppServerInstance",
+        "category": "network_control",
+        "relation": "association",
+        "action_id": "ACT_REACH_EXPOSED_ADMIN_SERVICE",
+        "action": "Reach an administrative service exposed to the internet",
+        "tactic": "initial access",
+        "technique": "T1190",
+        "precondition": [
+          "internet_reachable"
+        ],
+        "precondition_options": [
+          "internet_reachable"
+        ],
+        "required_capabilities": [
+          {
+            "end": "source",
+            "source_id": [
+              "INCOMING_SSH_DISABLED"
+            ]
+          }
+        ],
+        "required_permissions": [],
+        "postcondition": [
+          "foothold(AppServerInstance)"
+        ],
+        "input": {
+          "target": "AppServerInstance",
+          "target_type": "AWS::EC2::Instance",
+          "security_group": "AppSecurityGroup",
+          "exposed_cidr": [
+            "0.0.0.0/0"
+          ],
+          "exposed_ports": [
+            22
+          ],
+          "evidence": [
+            "INCOMING_SSH_DISABLED"
+          ]
+        },
+        "output": {
+          "session": "AppServerInstance",
+          "access": "interactive shell"
+        },
+        "fallback": false
+      },
+      {
+        "source": "AppServerInstance",
+        "target": "AppInstanceProfile",
+        "category": "identity",
+        "relation": "dependency",
+        "action_id": "ACT_READ_INSTANCE_METADATA",
+        "action": "Read role credentials from the instance metadata service",
+        "tactic": "credential access",
+        "technique": "T1552.005",
+        "precondition": [
+          "foothold(AppServerInstance)"
+        ],
+        "precondition_options": [
+          "foothold(AppServerInstance)"
+        ],
+        "required_capabilities": [
+          {
+            "end": "source",
+            "state": [
+              "instance_metadata_service_v1_enabled"
+            ]
+          }
+        ],
+        "required_permissions": [],
+        "postcondition": [
+          "credential(AppInstanceProfile)"
+        ],
+        "input": {
+          "instance": "AppServerInstance",
+          "profile": "AppInstanceProfile",
+          "metadata_service_version": "v1",
+          "evidence": [
+            "EC2_IMDSV1_ENABLED"
+          ]
+        },
+        "output": {
+          "credential": "AppInstanceProfile",
+          "credential_type": "temporary session credentials"
+        },
+        "fallback": false
+      },
+      {
+        "source": "AppInstanceProfile",
+        "target": "AppServerRole",
+        "category": "identity",
+        "relation": "dependency",
+        "action_id": "ACT_USE_ATTACHED_IDENTITY",
+        "action": "Use an attached identity",
+        "tactic": "lateral movement",
+        "technique": "T1550",
+        "precondition": [
+          "credential(AppInstanceProfile)"
+        ],
+        "precondition_options": [
+          "foothold(AppInstanceProfile)",
+          "credential(AppInstanceProfile)"
+        ],
+        "required_capabilities": [],
+        "required_permissions": [],
+        "postcondition": [
+          "credential(AppServerRole)"
+        ],
+        "input": {
+          "from": "AppInstanceProfile",
+          "identity": "AppServerRole",
+          "identity_type": "AWS::IAM::Role"
+        },
+        "output": {
+          "credential": "AppServerRole"
+        },
+        "fallback": false
+      },
+      {
+        "source": "AppServerRole",
+        "target": "DeploymentRole",
+        "category": "identity",
+        "relation": "dependency",
+        "action_id": "ACT_USE_ATTACHED_IDENTITY",
+        "action": "Use an attached identity",
+        "tactic": "lateral movement",
+        "technique": "T1550",
+        "precondition": [
+          "credential(AppServerRole)"
+        ],
+        "precondition_options": [
+          "foothold(AppServerRole)",
+          "credential(AppServerRole)"
+        ],
+        "required_capabilities": [],
+        "required_permissions": [],
+        "postcondition": [
+          "credential(DeploymentRole)"
+        ],
+        "input": {
+          "from": "AppServerRole",
+          "identity": "DeploymentRole",
+          "identity_type": "AWS::IAM::Role"
+        },
+        "output": {
+          "credential": "DeploymentRole"
+        },
+        "fallback": false
+      },
+      {
+        "source": "DeploymentRole",
+        "target": "OverPermissiveRole",
+        "category": "escalation",
+        "relation": "escalation",
+        "action_id": "ACT_WRITE_ROLE_POLICY",
+        "action": "Grant yourself more permissions by writing a role policy",
+        "tactic": "privilege escalation",
+        "technique": "T1098.001",
+        "precondition": [
+          "credential(DeploymentRole)"
+        ],
+        "precondition_options": [
+          "credential(DeploymentRole)"
+        ],
+        "required_capabilities": [
+          {
+            "end": "source",
+            "source_id_prefix": [
+              "PRIVESC_PUT_ROLE_POLICY",
+              "PRIVESC_ATTACH_ROLE_POLICY",
+              "PRIVESC_CREATE_POLICY_VERSION",
+              "PRIVESC_SET_DEFAULT_POLICY_VERSION"
+            ]
+          }
+        ],
+        "required_permissions": [
+          "iam:AttachRolePolicy"
+        ],
+        "postcondition": [
+          "credential(OverPermissiveRole)"
+        ],
+        "input": {
+          "from_identity": "DeploymentRole",
+          "to_identity": "OverPermissiveRole",
+          "method": [
+            "PRIVESC_ATTACH_ROLE_POLICY"
+          ]
+        },
+        "output": {
+          "credential": "OverPermissiveRole",
+          "privilege_ceiling": "administrator"
+        },
+        "fallback": false
+      },
+      {
+        "source": "OverPermissiveRole",
+        "target": "InsecureS3Bucket",
+        "category": "capability",
+        "relation": "capability",
+        "action_id": "ACT_READ_CLOUD_STORAGE",
+        "action": "Read data from cloud storage",
+        "tactic": "collection",
+        "technique": "T1530",
+        "precondition": [
+          "credential(OverPermissiveRole)"
+        ],
+        "precondition_options": [
+          "credential(OverPermissiveRole)"
+        ],
+        "required_capabilities": [],
+        "required_permissions": [],
+        "postcondition": [
+          "data_access(InsecureS3Bucket)"
+        ],
+        "input": {
+          "identity": "OverPermissiveRole",
+          "store": "InsecureS3Bucket",
+          "bucket_name": [
+            "insecure-public-bucket-demo"
+          ],
+          "evidence": [
+            "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
+            "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+          ]
+        },
+        "output": {
+          "data_access": "InsecureS3Bucket",
+          "data_kind": "object storage"
+        },
+        "fallback": false
+      }
+    ]
+  },
+  {
+    "source_id": "AP-009",
+    "entry_id": "AppSecurityGroup",
     "target_id": "PublicRDS",
     "objective": "ransomware",
     "risk_score": 42.71,
@@ -1441,248 +1683,6 @@
         "output": {
           "data_access": "PublicRDS",
           "data_kind": "structured records"
-        },
-        "fallback": false
-      }
-    ]
-  },
-  {
-    "source_id": "AP-009",
-    "entry_id": "AppSecurityGroup",
-    "target_id": "InsecureS3Bucket",
-    "objective": "data_theft",
-    "risk_score": 42.15,
-    "attack_level": "CRITICAL",
-    "steps": [
-      {
-        "source": "AppSecurityGroup",
-        "target": "AppServerInstance",
-        "category": "network_control",
-        "relation": "association",
-        "action_id": "ACT_REACH_EXPOSED_ADMIN_SERVICE",
-        "action": "Reach an administrative service exposed to the internet",
-        "tactic": "initial access",
-        "technique": "T1190",
-        "precondition": [
-          "internet_reachable"
-        ],
-        "precondition_options": [
-          "internet_reachable"
-        ],
-        "required_capabilities": [
-          {
-            "end": "source",
-            "source_id": [
-              "INCOMING_SSH_DISABLED"
-            ]
-          }
-        ],
-        "required_permissions": [],
-        "postcondition": [
-          "foothold(AppServerInstance)"
-        ],
-        "input": {
-          "target": "AppServerInstance",
-          "target_type": "AWS::EC2::Instance",
-          "security_group": "AppSecurityGroup",
-          "exposed_cidr": [
-            "0.0.0.0/0"
-          ],
-          "exposed_ports": [
-            22
-          ],
-          "evidence": [
-            "INCOMING_SSH_DISABLED"
-          ]
-        },
-        "output": {
-          "session": "AppServerInstance",
-          "access": "interactive shell"
-        },
-        "fallback": false
-      },
-      {
-        "source": "AppServerInstance",
-        "target": "AppInstanceProfile",
-        "category": "identity",
-        "relation": "dependency",
-        "action_id": "ACT_READ_INSTANCE_METADATA",
-        "action": "Read role credentials from the instance metadata service",
-        "tactic": "credential access",
-        "technique": "T1552.005",
-        "precondition": [
-          "foothold(AppServerInstance)"
-        ],
-        "precondition_options": [
-          "foothold(AppServerInstance)"
-        ],
-        "required_capabilities": [
-          {
-            "end": "source",
-            "state": [
-              "instance_metadata_service_v1_enabled"
-            ]
-          }
-        ],
-        "required_permissions": [],
-        "postcondition": [
-          "credential(AppInstanceProfile)"
-        ],
-        "input": {
-          "instance": "AppServerInstance",
-          "profile": "AppInstanceProfile",
-          "metadata_service_version": "v1",
-          "evidence": [
-            "EC2_IMDSV1_ENABLED"
-          ]
-        },
-        "output": {
-          "credential": "AppInstanceProfile",
-          "credential_type": "temporary session credentials"
-        },
-        "fallback": false
-      },
-      {
-        "source": "AppInstanceProfile",
-        "target": "AppServerRole",
-        "category": "identity",
-        "relation": "dependency",
-        "action_id": "ACT_USE_ATTACHED_IDENTITY",
-        "action": "Use an attached identity",
-        "tactic": "lateral movement",
-        "technique": "T1550",
-        "precondition": [
-          "credential(AppInstanceProfile)"
-        ],
-        "precondition_options": [
-          "foothold(AppInstanceProfile)",
-          "credential(AppInstanceProfile)"
-        ],
-        "required_capabilities": [],
-        "required_permissions": [],
-        "postcondition": [
-          "credential(AppServerRole)"
-        ],
-        "input": {
-          "from": "AppInstanceProfile",
-          "identity": "AppServerRole",
-          "identity_type": "AWS::IAM::Role"
-        },
-        "output": {
-          "credential": "AppServerRole"
-        },
-        "fallback": false
-      },
-      {
-        "source": "AppServerRole",
-        "target": "DeploymentRole",
-        "category": "identity",
-        "relation": "dependency",
-        "action_id": "ACT_USE_ATTACHED_IDENTITY",
-        "action": "Use an attached identity",
-        "tactic": "lateral movement",
-        "technique": "T1550",
-        "precondition": [
-          "credential(AppServerRole)"
-        ],
-        "precondition_options": [
-          "foothold(AppServerRole)",
-          "credential(AppServerRole)"
-        ],
-        "required_capabilities": [],
-        "required_permissions": [],
-        "postcondition": [
-          "credential(DeploymentRole)"
-        ],
-        "input": {
-          "from": "AppServerRole",
-          "identity": "DeploymentRole",
-          "identity_type": "AWS::IAM::Role"
-        },
-        "output": {
-          "credential": "DeploymentRole"
-        },
-        "fallback": false
-      },
-      {
-        "source": "DeploymentRole",
-        "target": "OverPermissiveRole",
-        "category": "escalation",
-        "relation": "escalation",
-        "action_id": "ACT_WRITE_ROLE_POLICY",
-        "action": "Grant yourself more permissions by writing a role policy",
-        "tactic": "privilege escalation",
-        "technique": "T1098.001",
-        "precondition": [
-          "credential(DeploymentRole)"
-        ],
-        "precondition_options": [
-          "credential(DeploymentRole)"
-        ],
-        "required_capabilities": [
-          {
-            "end": "source",
-            "source_id_prefix": [
-              "PRIVESC_PUT_ROLE_POLICY",
-              "PRIVESC_ATTACH_ROLE_POLICY",
-              "PRIVESC_CREATE_POLICY_VERSION",
-              "PRIVESC_SET_DEFAULT_POLICY_VERSION"
-            ]
-          }
-        ],
-        "required_permissions": [
-          "iam:AttachRolePolicy"
-        ],
-        "postcondition": [
-          "credential(OverPermissiveRole)"
-        ],
-        "input": {
-          "from_identity": "DeploymentRole",
-          "to_identity": "OverPermissiveRole",
-          "method": [
-            "PRIVESC_ATTACH_ROLE_POLICY"
-          ]
-        },
-        "output": {
-          "credential": "OverPermissiveRole",
-          "privilege_ceiling": "administrator"
-        },
-        "fallback": false
-      },
-      {
-        "source": "OverPermissiveRole",
-        "target": "InsecureS3Bucket",
-        "category": "capability",
-        "relation": "capability",
-        "action_id": "ACT_READ_CLOUD_STORAGE",
-        "action": "Read data from cloud storage",
-        "tactic": "collection",
-        "technique": "T1530",
-        "precondition": [
-          "credential(OverPermissiveRole)"
-        ],
-        "precondition_options": [
-          "credential(OverPermissiveRole)"
-        ],
-        "required_capabilities": [],
-        "required_permissions": [],
-        "postcondition": [
-          "data_access(InsecureS3Bucket)"
-        ],
-        "input": {
-          "identity": "OverPermissiveRole",
-          "store": "InsecureS3Bucket",
-          "bucket_name": [
-            "insecure-public-bucket-demo"
-          ],
-          "evidence": [
-            "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
-            "S3_BUCKET_PUBLIC_READ_PROHIBITED"
-          ]
-        },
-        "output": {
-          "data_access": "InsecureS3Bucket",
-          "data_kind": "object storage"
         },
         "fallback": false
       }

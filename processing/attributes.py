@@ -333,6 +333,24 @@ def statement_principals(statement):
     return found
 
 
+def statement_source_ips(statement):
+    """The IP ranges an `aws:SourceIp` condition restricts a statement to."""
+
+    found = []
+
+    for operator, block in (statement.get("Condition") or {}).items():
+
+        if operator.lower() not in ("ipaddress", "ipaddressifexists") or not isinstance(block, dict):
+            continue
+
+        for key, value in block.items():
+
+            if key.lower() == "aws:sourceip":
+                found.extend(item for item in as_list(value) if isinstance(item, str))
+
+    return found
+
+
 def statement_reads_objects(statement):
     """True when a statement's Action includes reading object data."""
 
@@ -372,8 +390,10 @@ def bucket_policy_facts(policy_properties):
     different (also serious) problem, and reporting it under a rule named for
     public *read* would be a finding that says the wrong thing.
 
-    `Grantee` is every principal the policy names, so a rule can check them
-    against an allow-list.
+    `Grantee` is who each Allow statement grants access to, so a rule can check
+    them against an allow-list, the way AWS Config's S3_BUCKET_POLICY_GRANTEE_CHECK
+    does: the IP ranges an `aws:SourceIp` condition restricts it to, or failing
+    that its principals. A Deny grants nothing, so it adds no grantee.
     """
 
     allows_public_read = False
@@ -381,12 +401,12 @@ def bucket_policy_facts(policy_properties):
 
     for statement in policy_statements(policy_properties):
 
-        principals = statement_principals(statement)
-
-        grantees.extend(principals)
-
         if statement.get("Effect") != "Allow":
             continue
+
+        principals = statement_principals(statement)
+
+        grantees.extend(statement_source_ips(statement) or principals)
 
         if WILDCARD not in principals:
             continue

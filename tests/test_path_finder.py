@@ -405,7 +405,8 @@ def test_the_known_multi_hop_path_is_found_with_its_exact_hops(real_paths):
         "IAM_TRUST_POLICY_WILDCARD",
         "S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED",
         "S3_BUCKET_PUBLIC_READ_PROHIBITED",
-        "REQUIRED_TAGS"
+        "REQUIRED_TAGS",
+        "S3_BUCKET_POLICY_GRANTEE_CHECK"
     ]
 
 
@@ -739,7 +740,7 @@ def test_an_unknown_or_missing_severity_falls_back_below_low():
 def test_the_real_path_sums_the_severities_of_every_weakness(real_graph):
     """Every distinct weakness on the known path, counted once.
 
-    Ten, not five. Several nodes carry more than one finding and they are
+    Eleven, not five. Several nodes carry more than one finding and they are
     different weaknesses, so each counts: PublicEC2Instance is both reachable
     (EC2_PUBLIC_IP) and hands over its role's credentials (EC2_IMDSV1_ENABLED),
     which is the behaviour test_two_different_weaknesses_on_one_node_both_count
@@ -767,10 +768,12 @@ def test_the_real_path_sums_the_severities_of_every_weakness(real_graph):
         + SEVERITY_WEIGHTS["critical"]
         + SEVERITY_WEIGHTS["critical"]
 
-        # InsecureS3Bucket: public access unblocked, publicly readable, untagged.
+        # InsecureS3Bucket: public access unblocked, publicly readable, untagged,
+        # and its policy grants "*", outside the trusted set (trust).
         + SEVERITY_WEIGHTS["high"]
         + SEVERITY_WEIGHTS["high"]
         + SEVERITY_WEIGHTS["low"]
+        + SEVERITY_WEIGHTS["high"]
     )
 
     assert total != len(KNOWN_PATH) * DEFAULT_SEVERITY_WEIGHT

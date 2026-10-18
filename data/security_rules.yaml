@@ -1,16 +1,19 @@
 # Security rules.
 #
 # ORIGIN:
-# Rules 1-11 are the canonical ruleset (rulesets/canonical_rules.yaml, owned by
-# Meenakshi, derived from AWS Config managed rules). Their `id`, `source_id`,
-# `semantic`, `state`, `summary`, `conditions`, `parameters` and `references` are
-# hers. Where this file departs from that source the deviation is written next to
-# the rule under `deviations:`, so a reviewer sees the change without diffing two
-# files.
+# The first block is the canonical ruleset (rulesets/canonical_rules.yaml,
+# Meenakshi's, derived from AWS Config managed rules), all 12 of its rules. Their
+# `id`, `source_id`, `service`, `semantic`, `state`, `summary`, `parameters` and
+# `references` are hers, unchanged; tests/test_canonical_rules.py checks that.
+# Their conditions are hers rewritten into this engine's syntax: parameters as
+# {placeholders}, and field names relative to a `scope`. Where a rewrite changes
+# what a rule matches, the reason is written next to it under `deviations:`.
+# The two AWS::EC2::SecurityGroupIngress rules are her two security group rules
+# again, for the standalone spelling of an inbound rule.
 #
-# Rules 12-16 are ours. They have no canonical equivalent and they are what makes
-# an attack *path* findable rather than a list of unrelated findings. See the
-# section header before rule 12.
+# The second block is ours: seven rules with no canonical equivalent, which are
+# what make an attack *path* findable rather than a list of unrelated findings.
+# See the section header before them.
 #
 # WHAT THIS FILE DELIBERATELY DOES NOT CARRY:
 # `severity`. The canonical rules do not declare one, and inventing a number per
@@ -43,12 +46,11 @@
   semantic: network_control
 
   state:
-    id: unrestricted_common_port_access
-    display_name: Security group allows unrestricted traffic to a blocked port
+    id: sg_unrestricted_common_port
+    display_name: Security group allows unrestricted incoming traffic on a restricted port
 
   summary: >
-    Security group allows unrestricted incoming traffic to a port that should
-    never be reachable from the internet.
+    Security group allows unrestricted incoming TCP traffic on a restricted port.
 
   # THE DEVIATION, AND WHY IT MATTERS:
   # The canonical rule has protocol, port and cidr as three sibling leaves under
@@ -126,11 +128,11 @@
   semantic: network_control
 
   state:
-    id: unrestricted_ssh_access
-    display_name: Security group allows SSH from anywhere
+    id: sg_unrestricted_ssh
+    display_name: Security group allows unrestricted SSH
 
   summary: >
-    Security group allows incoming SSH traffic from any address.
+    Security group allows unrestricted SSH ingress on port 22.
 
   deviations:
     - "added `scope: ingress`, for the same reason as RESTRICTED_INCOMING_TRAFFIC:
@@ -188,12 +190,12 @@
   semantic: network_control
 
   state:
-    id: unrestricted_common_port_access
-    display_name: Security group allows unrestricted traffic to a blocked port
+    id: sg_unrestricted_common_port
+    display_name: Security group allows unrestricted incoming traffic on a restricted port
 
   summary: >
-    Standalone security group ingress rule allows unrestricted incoming traffic
-    to a port that should never be reachable from the internet.
+    Standalone security group ingress rule allows unrestricted incoming TCP
+    traffic on a restricted port.
 
   deviations:
     - "per-type copy. The canonical rule is indexed on AWS::EC2::SecurityGroup
@@ -264,12 +266,12 @@
   semantic: network_control
 
   state:
-    id: unrestricted_ssh_access
-    display_name: Security group allows SSH from anywhere
+    id: sg_unrestricted_ssh
+    display_name: Security group allows unrestricted SSH
 
   summary: >
-    Standalone security group ingress rule allows incoming SSH traffic from any
-    address.
+    Standalone security group ingress rule allows unrestricted SSH ingress on
+    port 22.
 
   deviations:
     - "per-type copy, for the same reason as the RESTRICTED_INCOMING_TRAFFIC
@@ -600,7 +602,7 @@
 - id: aws_config:IAM_PASSWORD_POLICY:account
   origin: aws_config
   source_id: IAM_PASSWORD_POLICY
-  service: iam
+  service: aws
   resource_type: account
   semantic: capability
 
@@ -661,7 +663,7 @@
 - id: aws_config:ROOT_ACCOUNT_MFA_ENABLED:account
   origin: aws_config
   source_id: ROOT_ACCOUNT_MFA_ENABLED
-  service: iam
+  service: aws
   resource_type: account
   semantic: identity
 
@@ -692,7 +694,7 @@
 - id: aws_config:CLOUD_TRAIL_ENABLED:account
   origin: aws_config
   source_id: CLOUD_TRAIL_ENABLED
-  service: cloudtrail
+  service: aws
   resource_type: account
   semantic: impact
 
@@ -720,12 +722,46 @@
       id: CLOUD_TRAIL_ENABLED
       url: https://docs.aws.amazon.com/config/latest/developerguide/cloudtrail-enabled.html
 
+- id: aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_POLICY_GRANTEE_CHECK
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: trust
+
+  state:
+    id: s3_bucket_policy_untrusted_principal
+    display_name: S3 bucket policy grants access outside the trusted principal set
+
+  summary: >
+    S3 bucket policy grants access to a principal outside the trusted set
+    defined by 203.0.113.0/24, 198.51.100.0/24.
+
+  # BucketPolicy.Grantee is every principal the bucket's policy names, so any
+  # principal outside the trusted set fires the rule, a wildcard "*" included.
+  conditions:
+    field: BucketPolicy.Grantee
+    comparison: not_in
+    value: ["203.0.113.0/24", "198.51.100.0/24"]
+
+  parameters:
+    ipAddresses: ["203.0.113.0/24", "198.51.100.0/24"]
+
+  attack_techniques:
+    - id: T1530
+      name: Data from Cloud Storage
+
+  references:
+    - source: aws_config
+      id: S3_BUCKET_POLICY_GRANTEE_CHECK
+      url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-policy-grantee-check.html
+
 
 # ==============================================================================
 # NOT IN THE CANONICAL RULESET - OURS
 # ==============================================================================
 #
-# These five have no canonical equivalent and they are load-bearing, not extra.
+# These seven have no canonical equivalent and they are load-bearing, not extra.
 # The canonical set finds misconfigurations; these are what turn a set of
 # misconfigurations into a *path*:
 #
@@ -737,7 +773,7 @@
 #     an attack path. The canonical set has no `privilege` semantic at all, so
 #     without these every candidate path is rejected and the tool reports zero.
 #
-# So deleting this block does not lose five findings, it loses every attack path.
+# So deleting this block does not lose seven rules, it loses every attack path.
 #
 # TO WHOEVER OWNS THE CANONICAL RULESET:
 # these are ours and are meant to be replaced. The open question is whether

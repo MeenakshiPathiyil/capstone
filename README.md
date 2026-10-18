@@ -37,7 +37,7 @@ python3 -m runner.graph_runner     # findings, graphs and ranked paths -> output
 ```
 
 ```
-Done. 15 resources, 16 edges, 21 security findings, 22 attack paths.
+Done. 15 resources, 16 edges, 22 security findings, 22 attack paths.
 ```
 
 Stage 4 needs a GPU (Colab or Kaggle) or an Apple Silicon Mac; see

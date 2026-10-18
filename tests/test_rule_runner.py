@@ -9,7 +9,7 @@ from security_state_graph.state_graph import INFRA_PATH, RULES_PATH, evaluate_fi
 
 def test_stage_two_alone_writes_the_pipelines_findings(tmp_path, monkeypatch):
     """It used to evaluate the rules on unprojected records, so every rule written
-    against the abstract attributes matched nothing: 13 findings instead of 21."""
+    against the abstract attributes matched nothing and it undercounted."""
 
     out = tmp_path / "output_states.json"
     monkeypatch.setattr(rule_runner, "OUTPUT_PATH", out)
@@ -18,4 +18,4 @@ def test_stage_two_alone_writes_the_pipelines_findings(tmp_path, monkeypatch):
 
     expected = evaluate_findings(build_infra_model(INFRA_PATH), RULES_PATH)
     assert json.loads(out.read_text(encoding="utf-8")) == expected
-    assert len(expected) == 21
+    assert len(expected) == 22

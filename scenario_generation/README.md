@@ -173,7 +173,7 @@ adapter never saw.
 
 `evaluation/compare_models.py` runs the fine-tuned Mistral and
 `RISys-Lab/RedSage-Qwen3-8B-Ins` on the same five attack paths (`AP-001`,
-`AP-003`, `AP-007`, `AP-014`, `AP-015`: both entry routes, the four objectives
+`AP-002`, `AP-007`, `AP-014`, `AP-015`: both entry routes, the four objectives
 the export contains, and the one short path). Each model gets the same request in its own format,
 the same decoding settings and seed, and both are scored with the format metrics
 and the Gemini judge. The judge key is required; `--no_judge` reports the format

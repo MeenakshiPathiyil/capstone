@@ -1,18 +1,18 @@
 digraph security_state_graph {
-    // Security state graph: 15 resources, 16 edges, 21 findings, 7 entry points, 3 targets.
+    // Security state graph: 15 resources, 16 edges, 22 findings, 7 entry points, 3 targets.
     // Render it with: dot -Tsvg output/security_state_graph.dot -o security_state_graph.svg
     // Diagram key in README.md. Arrows are the attacker's direction, so a network_control edge is labelled 'reversed'.
     //
     // Ranked attack paths, worst first (see output/attack_paths.json):
     //   AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
-    //   AP-002  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
-    //   AP-003  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+    //   AP-002  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+    //   AP-003  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
     //   AP-004  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
     //   AP-005  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
     //   AP-006  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole
     //   AP-007  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
-    //   AP-008  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
-    //   AP-009  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+    //   AP-008  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+    //   AP-009  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
     //   AP-010  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
     //   AP-011  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
     //   AP-012  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
@@ -58,8 +58,8 @@ digraph security_state_graph {
     "n_IngestFunction" -> "n_DeploymentRole" [label="trust", color="#374151", penwidth="2"];
     "n_OpenSecurityGroup" -> "n_PublicEC2Instance" [label="network_control (reversed; AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012, AP-015)", color="#b3261e", penwidth="4"];
     "n_OverPermissiveInstanceProfile" -> "n_OverPermissiveRole" [label="identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)", color="#b3261e", penwidth="4"];
-    "n_OverPermissiveRole" -> "n_InsecureS3Bucket" [label="capability (AP-001, AP-003, AP-007, AP-009)", color="#b3261e", penwidth="4"];
-    "n_OverPermissiveRole" -> "n_PublicRDS" [label="capability (AP-002, AP-004, AP-005, AP-008, AP-010, AP-013)", color="#b3261e", penwidth="4"];
+    "n_OverPermissiveRole" -> "n_InsecureS3Bucket" [label="capability (AP-001, AP-002, AP-007, AP-008)", color="#b3261e", penwidth="4"];
+    "n_OverPermissiveRole" -> "n_PublicRDS" [label="capability (AP-003, AP-004, AP-005, AP-009, AP-010, AP-013)", color="#b3261e", penwidth="4"];
     "n_OverPermissiveRole" -> "n_ReportsTable" [label="capability (AP-011, AP-012, AP-016, AP-017)", color="#b3261e", penwidth="4"];
     "n_PublicBucketPolicy" -> "n_InsecureS3Bucket" [label="connection", color="#374151", penwidth="2"];
     "n_PublicEC2Instance" -> "n_OverPermissiveInstanceProfile" [label="identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)", color="#b3261e", penwidth="4"];

@@ -181,3 +181,26 @@ def test_a_wildcard_principal_on_a_write_action_is_not_public_read():
     }
 
     assert projected["Bucket"]["BucketPolicy.AllowsPublicRead"] is False
+
+
+def test_a_bucket_policy_grantee_is_who_an_allow_statement_grants():
+    """An IP restriction names the grantee when there is one, the principal
+    otherwise, and a Deny grants nothing."""
+
+    records = [
+        record("Bucket", "AWS::S3::Bucket", {"BucketName": "b"}),
+        record("Policy", "AWS::S3::BucketPolicy", {
+            "Bucket": "Bucket",
+            "PolicyDocument": {"Statement": [
+                {"Effect": "Allow", "Principal": {"AWS": "arn:aws:iam::1:root"},
+                 "Action": "s3:GetObject",
+                 "Condition": {"IpAddress": {"aws:SourceIp": "203.0.113.0/24"}}},
+                {"Effect": "Allow", "Principal": "*", "Action": "s3:PutObject"},
+                {"Effect": "Deny", "Principal": {"AWS": "arn:aws:iam::2:root"}, "Action": "s3:*"}
+            ]}
+        })
+    ]
+
+    projected = {item["id"]: item["attributes"] for item in project_all(records)}
+
+    assert projected["Bucket"]["BucketPolicy.Grantee"] == ["203.0.113.0/24", "*"]

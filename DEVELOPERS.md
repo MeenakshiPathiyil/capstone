@@ -77,7 +77,7 @@ python3 -m runner.graph_runner
 ```
 
 ```
-Done. 15 resources, 16 edges, 21 security findings, 33 attack paths.
+Done. 15 resources, 16 edges, 22 security findings, 22 attack paths.
   AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile
                     -> OverPermissiveRole -> PublicRDS
 ```
@@ -423,7 +423,7 @@ architecture diagram draws:
 | `data/security_rules.yaml` | configuration → capabilities | the security state graph |
 | `data/attack_transitions.yaml` | capabilities → actions | the attack graph |
 
-### `data/security_rules.yaml` (20 rules)
+### `data/security_rules.yaml` (21 rules)
 
 Copy an existing rule. Keep the field order (a test checks it). Required:
 

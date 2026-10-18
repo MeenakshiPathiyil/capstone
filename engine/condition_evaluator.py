@@ -124,13 +124,20 @@ def compare(value, operator, expected):
     # resolves to nothing never reaches here, because evaluate_leaf returns False
     # on an empty resolution. So `not_in` means "present, and not one of these".
     #
-    # A non-list `value` is a rule with a bug in it and returns False either way,
-    # which is the same answer `in` gives rather than the opposite one.
+    # A non-list `expected` is a rule with a bug in it and returns False either
+    # way, which is the same answer `in` gives rather than the opposite one.
+    #
+    # A list `value` is a set of things, such as every principal a bucket policy
+    # grants, so the leaf holds when any one of them is outside `expected`. An
+    # empty list grants nothing and does not match.
     if operator == "not_in":
-        if isinstance(expected, list):
-            return value not in expected
+        if not isinstance(expected, list):
+            return False
 
-        return False
+        if isinstance(value, list):
+            return any(item not in expected for item in value)
+
+        return value not in expected
 
     # -----------------------------
 
