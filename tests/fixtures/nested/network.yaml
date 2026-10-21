@@ -1,0 +1,19 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: The way in. Nothing else in this file.
+
+Resources:
+
+  OpenGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SSH open to the world
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  OpenGroup:
+    Description: The security group the web tier attaches to
+    Value: !Ref OpenGroup

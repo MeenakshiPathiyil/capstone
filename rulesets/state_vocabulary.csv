@@ -1,0 +1,13 @@
+state_id,display_name,resource_type,source_rule_id
+cloudtrail_not_enabled,AWS CloudTrail is not enabled for the account,account,aws_config:CLOUD_TRAIL_ENABLED:account
+iam_password_policy_weak,IAM password policy does not meet required security settings,account,aws_config:IAM_PASSWORD_POLICY:account
+rds_storage_unencrypted,RDS storage is not encrypted,AWS::RDS::DBInstance,aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance
+required_tag_missing,Required tag is missing,AWS::EC2::Instance,aws_config:REQUIRED_TAGS:AWS::EC2::Instance
+required_tag_missing,Required tag is missing,AWS::RDS::DBInstance,aws_config:REQUIRED_TAGS:AWS::RDS::DBInstance
+required_tag_missing,Required tag is missing,AWS::S3::Bucket,aws_config:REQUIRED_TAGS:AWS::S3::Bucket
+root_account_mfa_disabled,Root account does not have MFA enabled,account,aws_config:ROOT_ACCOUNT_MFA_ENABLED:account
+s3_bucket_policy_untrusted_principal,S3 bucket policy grants access outside the trusted principal set,AWS::S3::Bucket,aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket
+s3_bucket_public_access_allowed,S3 bucket allows public access,AWS::S3::Bucket,aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket
+s3_bucket_public_read_allowed,S3 bucket allows public read access,AWS::S3::Bucket,aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket
+sg_unrestricted_common_port,Security group allows unrestricted incoming traffic on a restricted port,AWS::EC2::SecurityGroup,aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup
+sg_unrestricted_ssh,Security group allows unrestricted SSH,AWS::EC2::SecurityGroup,aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup

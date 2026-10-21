@@ -1,0 +1,85 @@
+flowchart LR
+%% Security state graph: 15 resources, 16 edges, 22 findings, 7 entry points, 3 targets.
+%% Render it with: mmdc -i output/security_state_graph.mmd -o security_state_graph.svg
+%% Diagram key in README.md. Arrows are the attacker's direction, so a network_control edge is labelled 'reversed'.
+%%
+%% Ranked attack paths, worst first (see output/attack_paths.json):
+%%   AP-001  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-002  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-003  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
+%%   AP-004  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
+%%   AP-005  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS
+%%   AP-006  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole
+%%   AP-007  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-008  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket
+%%   AP-009  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
+%%   AP-010  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
+%%   AP-011  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
+%%   AP-012  CRITICAL  OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable
+%%   AP-013  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS
+%%   AP-014  CRITICAL  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole
+%%   AP-015  HIGH  OpenSecurityGroup -> PublicEC2Instance
+%%   AP-016  HIGH  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> ReportsTable
+%%   AP-017  HIGH  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> ReportsTable
+%%   AP-018  HIGH  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole
+%%   AP-019  HIGH  AppSecurityGroup -> AppServerInstance
+%%   AP-020  MEDIUM  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole
+%%   AP-021  MEDIUM  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> ReportsTable
+%%   AP-022  MEDIUM  AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> ReportsTable
+
+    n_AppInstanceProfile["AppInstanceProfile<br/>AWS::IAM::InstanceProfile<br/>no findings"]
+    n_AppSecurityGroup(["AppSecurityGroup<br/>AWS::EC2::SecurityGroup<br/>high<br/>[entry]"])
+    n_AppServerInstance(["AppServerInstance<br/>AWS::EC2::Instance<br/>critical<br/>[entry]"])
+    n_AppServerRole["AppServerRole<br/>AWS::IAM::Role<br/>high"]
+    n_DeploymentRole["DeploymentRole<br/>AWS::IAM::Role<br/>critical"]
+    n_IngestFunction["IngestFunction<br/>AWS::Lambda::Function<br/>no findings"]
+    n_InsecureS3Bucket(["InsecureS3Bucket<br/>AWS::S3::Bucket<br/>high<br/>[entry]"])
+    n_OpenLoadBalancer(["OpenLoadBalancer<br/>AWS::ElasticLoadBalancingV2::LoadBalancer<br/>high<br/>[entry]"])
+    n_OpenSecurityGroup(["OpenSecurityGroup<br/>AWS::EC2::SecurityGroup<br/>high<br/>[entry]"])
+    n_OverPermissiveInstanceProfile["OverPermissiveInstanceProfile<br/>AWS::IAM::InstanceProfile<br/>no findings"]
+    n_OverPermissiveRole["OverPermissiveRole<br/>AWS::IAM::Role<br/>critical"]
+    n_PublicBucketPolicy["PublicBucketPolicy<br/>AWS::S3::BucketPolicy<br/>critical"]
+    n_PublicEC2Instance(["PublicEC2Instance<br/>AWS::EC2::Instance<br/>critical<br/>[entry]"])
+    n_PublicRDS(["PublicRDS<br/>AWS::RDS::DBInstance<br/>high<br/>[entry]"])
+    n_ReportsTable["ReportsTable<br/>AWS::DynamoDB::Table<br/>no findings"]
+
+    n_AppInstanceProfile ==>|"identity (AP-007, AP-008, AP-009, AP-010, AP-013, AP-014, AP-016, AP-017, AP-018, AP-020, AP-021, AP-022)"| n_AppServerRole
+    n_AppSecurityGroup ==>|"network_control (reversed; AP-007, AP-008, AP-009, AP-010, AP-013, AP-014, AP-016, AP-017, AP-018, AP-019, AP-020, AP-021, AP-022)"| n_AppServerInstance
+    n_AppServerInstance ==>|"identity (AP-007, AP-008, AP-009, AP-010, AP-013, AP-014, AP-016, AP-017, AP-018, AP-020, AP-021, AP-022)"| n_AppInstanceProfile
+    n_AppServerRole ==>|"escalation + identity (AP-007, AP-008, AP-009, AP-010, AP-013, AP-014, AP-016, AP-017, AP-018, AP-021, AP-022)"| n_DeploymentRole
+    n_DeploymentRole -->|"escalation"| n_AppServerRole
+    n_DeploymentRole ==>|"escalation (AP-007, AP-008, AP-009, AP-010, AP-013, AP-014, AP-016, AP-017)"| n_OverPermissiveRole
+    n_DeploymentRole ==>|"capability (AP-021, AP-022)"| n_ReportsTable
+    n_IngestFunction -->|"trust"| n_DeploymentRole
+    n_OpenSecurityGroup ==>|"network_control (reversed; AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012, AP-015)"| n_PublicEC2Instance
+    n_OverPermissiveInstanceProfile ==>|"identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)"| n_OverPermissiveRole
+    n_OverPermissiveRole ==>|"capability (AP-001, AP-002, AP-007, AP-008)"| n_InsecureS3Bucket
+    n_OverPermissiveRole ==>|"capability (AP-003, AP-004, AP-005, AP-009, AP-010, AP-013)"| n_PublicRDS
+    n_OverPermissiveRole ==>|"capability (AP-011, AP-012, AP-016, AP-017)"| n_ReportsTable
+    n_PublicBucketPolicy -->|"connection"| n_InsecureS3Bucket
+    n_PublicEC2Instance ==>|"identity (AP-001, AP-002, AP-003, AP-004, AP-005, AP-006, AP-011, AP-012)"| n_OverPermissiveInstanceProfile
+
+    classDef sev_critical fill:#f8b4b4,stroke:#7f1d1d,stroke-width:2px,color:#111827,font-size:14px;
+    classDef sev_high fill:#fbcfa4,stroke:#7c2d12,stroke-width:2px,color:#111827,font-size:14px;
+    classDef sev_medium fill:#fde68a,stroke:#78350f,stroke-width:2px,color:#111827,font-size:14px;
+    classDef sev_low fill:#bfdbfe,stroke:#1e3a8a,stroke-width:2px,color:#111827,font-size:14px;
+    classDef sev_clean fill:#e5e7eb,stroke:#374151,stroke-width:2px,color:#111827,font-size:14px;
+    classDef sev_unknown fill:#ede9fe,stroke:#4c1d95,stroke-width:2px,color:#111827,font-size:14px;
+
+    class n_AppInstanceProfile sev_clean;
+    class n_AppSecurityGroup sev_high;
+    class n_AppServerInstance sev_critical;
+    class n_AppServerRole sev_high;
+    class n_DeploymentRole sev_critical;
+    class n_IngestFunction sev_clean;
+    class n_InsecureS3Bucket sev_high;
+    class n_OpenLoadBalancer sev_high;
+    class n_OpenSecurityGroup sev_high;
+    class n_OverPermissiveInstanceProfile sev_clean;
+    class n_OverPermissiveRole sev_critical;
+    class n_PublicBucketPolicy sev_critical;
+    class n_PublicEC2Instance sev_critical;
+    class n_PublicRDS sev_high;
+    class n_ReportsTable sev_clean;
+
+    linkStyle 0,1,2,3,5,6,8,9,10,11,12,14 stroke:#b3261e,stroke-width:4px;

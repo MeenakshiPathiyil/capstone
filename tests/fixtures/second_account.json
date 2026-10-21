@@ -1,0 +1,138 @@
+[
+  {
+    "id": "AppSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "raw_properties": {
+      "GroupDescription": "Application tier",
+      "SecurityGroupIngress": [
+        {
+          "IpProtocol": "tcp",
+          "FromPort": 3306,
+          "ToPort": 3306,
+          "CidrIp": "0.0.0.0/0"
+        }
+      ]
+    },
+    "semantic_properties": {
+      "GroupDescription": "unknown",
+      "SecurityGroupIngress[0].IpProtocol": "network_control",
+      "SecurityGroupIngress[0].FromPort": "network_control",
+      "SecurityGroupIngress[0].ToPort": "network_control",
+      "SecurityGroupIngress[0].CidrIp": "exposure"
+    }
+  },
+  {
+    "id": "AppServer",
+    "type": "AWS::EC2::Instance",
+    "raw_properties": {
+      "ImageId": "ami-0fedcba9876543210",
+      "InstanceType": "m5.large",
+      "SecurityGroupIds": [
+        "AppSecurityGroup"
+      ],
+      "IamInstanceProfile": "AppServerProfile",
+      "AssociatePublicIpAddress": true,
+      "MetadataOptions": {
+        "HttpTokens": "required"
+      }
+    },
+    "semantic_properties": {
+      "ImageId": "unknown",
+      "InstanceType": "unknown",
+      "SecurityGroupIds[0]": "network_control",
+      "IamInstanceProfile": "identity",
+      "AssociatePublicIpAddress": "exposure",
+      "MetadataOptions.HttpTokens": "unknown"
+    }
+  },
+  {
+    "id": "AppServerProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "raw_properties": {
+      "InstanceProfileName": "app-server-profile",
+      "Roles": [
+        "AppServerRole"
+      ]
+    },
+    "semantic_properties": {
+      "InstanceProfileName": "unknown",
+      "Roles[0]": "identity"
+    }
+  },
+  {
+    "id": "AppServerRole",
+    "type": "AWS::IAM::Role",
+    "raw_properties": {
+      "RoleName": "app-server-role",
+      "AssumeRolePolicyDocument": {
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": {
+              "Service": "ec2.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole"
+          }
+        ]
+      },
+      "Policies": [
+        {
+          "PolicyName": "secret-reader",
+          "PolicyDocument": {
+            "Statement": [
+              {
+                "Effect": "Allow",
+                "Action": "secretsmanager:*",
+                "Resource": "*"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "semantic_properties": {
+      "RoleName": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Effect": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Principal.Service": "unknown",
+      "AssumeRolePolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyName": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Effect": "unknown",
+      "Policies[0].PolicyDocument.Statement[0].Action": "capability",
+      "Policies[0].PolicyDocument.Statement[0].Resource": "capability"
+    }
+  },
+  {
+    "id": "ApiCredentials",
+    "type": "AWS::SecretsManager::Secret",
+    "raw_properties": {
+      "Name": "prod/api/credentials",
+      "Description": "Third-party API credentials",
+      "GenerateSecretString": {
+        "SecretStringTemplate": "{\"username\":\"api\"}",
+        "GenerateStringKey": "password"
+      }
+    },
+    "semantic_properties": {
+      "Name": "unknown",
+      "Description": "unknown",
+      "GenerateSecretString.SecretStringTemplate": "unknown",
+      "GenerateSecretString.GenerateStringKey": "unknown"
+    }
+  },
+  {
+    "id": "PrivateBackupBucket",
+    "type": "AWS::S3::Bucket",
+    "raw_properties": {
+      "BucketName": "app-backups-private",
+      "AccessControl": "Private",
+      "VersioningConfiguration": {
+        "Status": "Enabled"
+      }
+    },
+    "semantic_properties": {
+      "BucketName": "unknown",
+      "AccessControl": "unknown",
+      "VersioningConfiguration.Status": "unknown"
+    }
+  }
+]

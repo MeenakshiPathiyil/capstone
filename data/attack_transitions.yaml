@@ -1,0 +1,546 @@
+# Attack transition rules — the attack graph layer's ruleset.
+#
+# WHAT THIS FILE IS, in the architecture's own words:
+#   Rev1, p10: "Attack Transition Rules. Applied after the security state graph
+#   to generate the attack graph. Derived from attacker knowledge sources such as
+#   MITRE ATT&CK, CAPEC attack patterns, and real-world incident chains. Model
+#   attacker progression through exploitation, privilege escalation, lateral
+#   movement, and data access."
+#
+# So this is the second of the project's two rulesets:
+#
+#   data/security_rules.yaml     configuration -> capabilities   (Module 2)
+#   data/attack_transitions.yaml capabilities  -> actions        (this layer)
+#
+# One entry here is an ACTION: something an attacker does. It carries the four
+# fields Task 5 names, and they are two different kinds of thing:
+#
+#   precondition / postcondition   facts about ATTACKER STATE. Booleans. They
+#                                  chain, and that chaining is what makes a path
+#                                  valid: step N's postcondition has to satisfy
+#                                  step N+1's precondition.
+#
+#   input / output                 the DATA the action reads and produces. Not
+#                                  booleans. This is what lets a generated
+#                                  scenario say "port 3389 from 0.0.0.0/0, found
+#                                  by RESTRICTED_INCOMING_TRAFFIC" instead of
+#                                  "the attacker gained access".
+#
+# Both pairs are needed. Preconditions alone give a valid path with no detail;
+# inputs alone give detail with no argument that the step is reachable.
+#
+# HOW AN ACTION IS MATCHED:
+# `applies_to` is tested against one edge of the security state graph and the
+# nodes at its ends. Every key present must hold; absent keys do not constrain.
+# Several actions may match one edge, and each becomes its own attack graph edge
+# — that is the point. An `escalation` edge is not one generic
+# "privilege_escalation" step, it is whichever named method the role's findings
+# actually support.
+#
+# ORDER MATTERS for `stop_after_match`: actions are tried in file order, and an
+# action with `stop_after_match: true` prevents any later action from also
+# matching that edge. Used so a specific action shadows its generic sibling
+# rather than both firing.
+#
+# THE FALLBACK, AND WHY THIS FILE DOES NOT HAVE TO BE COMPLETE:
+# An edge no action here matches still gets a step: fallback_action in
+# security_state_graph/transitions.py, which claims no precondition, postcondition,
+# technique or tactic. So a half-written transition ruleset loses detail and never
+# loses a path. Anything falling back is reported by
+# `python3 -m runner.graph_runner`, so the gap is visible.
+#
+# THE BINDING MINI-SYNTAX, for `input` and `output` values:
+#   "target.id"                    the resource id at the far end of the edge
+#   "source.id"                    the resource id at the near end
+#   "target.type" / "source.type"  the CloudFormation type
+#   "target.attr:ingress.cidr"     values of a projected attribute (see
+#                                  processing/attributes.py), flattened
+#   "source.evidence:network_control,exposure"
+#                                  the source_id of every finding on that node
+#                                  carrying one of those semantics
+#   "source.states:privilege"      the whole finding records, same filter
+#   anything else                  a literal string
+# A binding that resolves to nothing is left out of the record rather than
+# written as null, so an input block only ever states what is actually known.
+#
+# EVERY `technique` MUST EXIST in data/attack_techniques.yaml with the matrix's
+# own name for it. tests/test_transitions.py enforces that, the same way the
+# security ruleset is enforced. `tactic` must be one of that file's tactics: it
+# is what orders the STAGE labels in the generated attack graph.
+
+
+transitions:
+
+  # ---------------------------------------------------------------------------
+  # INITIAL ACCESS — getting in from outside.
+  #
+  # These sit on `network_control` edges, which the traversal view has already
+  # reversed: the security group is the source and the resource it protects is
+  # the target, because traffic arrives through the group and lands on the thing
+  # behind it.
+  # ---------------------------------------------------------------------------
+
+  - id: ACT_REACH_EXPOSED_ADMIN_SERVICE
+    name: Reach an administrative service exposed to the internet
+    tactic: initial access
+    technique: T1190
+
+    summary: >
+      An administrative port — SSH, RDP, a database listener — is reachable from
+      any address, so the attacker connects to it directly rather than having to
+      get through an application first.
+
+    # WHY T1190 AND NOT T1021 (Remote Services):
+    # T1021 is the better description of the behaviour, and the IaaS matrix files
+    # it under LATERAL MOVEMENT. Citing it here would label the first hop of
+    # every path a lateral-movement stage, which is wrong in the generated attack
+    # graph and would be the first thing a reader queried. T1190 is the matrix's
+    # initial-access technique for something listening on a reachable port, so
+    # the tactic and the technique agree.
+    #
+    # The distinction from ACT_EXPLOIT_PUBLIC_APP is not the technique, it is what
+    # the attacker ends up with: an administrative service gives a session
+    # directly, an application has to be exploited first.
+
+    applies_to:
+      edge_category: network_control
+      target_admits_inbound: true
+
+    precondition:
+      facts: [internet_reachable]
+      capabilities:
+        - end: source
+          source_id: [INCOMING_SSH_DISABLED]
+    postcondition: ["foothold(target)"]
+
+    input:
+      target: target.id
+      target_type: target.type
+      security_group: source.id
+      exposed_cidr: source.attr:ingress.cidr
+      exposed_ports: source.attr:ingress.from_port
+      evidence: source.evidence:network_control
+
+    output:
+      session: target.id
+      access: interactive shell
+
+    stop_after_match: true
+
+
+  - id: ACT_EXPLOIT_PUBLIC_APP
+    name: Exploit public-facing application
+    tactic: initial access
+    technique: T1190
+
+    summary: >
+      A port that should not be reachable from the internet is, so whatever is
+      listening on it is the way in.
+
+    applies_to:
+      edge_category: network_control
+      target_admits_inbound: true
+
+    precondition:
+      facts: [internet_reachable]
+      capabilities:
+        - end: source
+          semantic: [network_control, exposure]
+    postcondition: ["foothold(target)"]
+
+    input:
+      target: target.id
+      target_type: target.type
+      security_group: source.id
+      exposed_cidr: source.attr:ingress.cidr
+      exposed_ports: source.attr:ingress.from_port
+      evidence: source.evidence:network_control,exposure
+
+    output:
+      session: target.id
+      access: code execution
+
+
+  - id: ACT_DISCOVER_SERVICE_BEHIND_BALANCER
+    name: Discover the service behind a load balancer
+    tactic: discovery
+    technique: T1046
+
+    summary: >
+      A listener forwards traffic to a target group, so reaching the balancer
+      reveals and reaches what is behind it. Traffic passes through and stays
+      traffic: this does not run the attacker's code, which is why it grants
+      reachability and not a foothold.
+
+    applies_to:
+      edge_category: traffic_path
+
+    precondition: [internet_reachable]
+    postcondition: [internet_reachable]
+
+    input:
+      forwarded_from: source.id
+      forwarded_to: target.id
+      target_type: target.type
+      evidence: source.evidence:exposure
+
+    output:
+      reachable: target.id
+
+
+  # ---------------------------------------------------------------------------
+  # CREDENTIAL ACCESS — turning a foothold into an identity.
+  #
+  # This is the step that used to be assumed. An instance carrying a role is not
+  # by itself a credential; something has to read it, and on AWS that something
+  # is the instance metadata service.
+  # ---------------------------------------------------------------------------
+
+  - id: ACT_READ_INSTANCE_METADATA
+    name: Read role credentials from the instance metadata service
+    tactic: credential access
+    technique: T1552.005
+
+    summary: >
+      IMDSv1 is enabled, so any process on the instance — or anything that can
+      make it issue an HTTP request — can retrieve the temporary credentials of
+      the role attached to it.
+
+    applies_to:
+      edge_category: identity
+      source_type: [AWS::EC2::Instance]
+
+    precondition:
+      facts: ["foothold(source)"]
+      capabilities:
+        - end: source
+          state: [instance_metadata_service_v1_enabled]
+    postcondition: ["credential(target)"]
+
+    input:
+      instance: source.id
+      profile: target.id
+      metadata_service_version: v1
+      evidence: source.evidence:privilege
+
+    output:
+      credential: target.id
+      credential_type: temporary session credentials
+
+    stop_after_match: true
+
+
+  - id: ACT_USE_ATTACHED_IDENTITY
+    name: Use an attached identity
+    tactic: lateral movement
+    technique: T1550
+
+    summary: >
+      An instance profile names the role it grants, and a role reached through
+      one is reached with it. The generic form of the metadata read, for the
+      hops where no IMDSv1 finding says how the credential was obtained.
+
+    applies_to:
+      edge_category: identity
+
+    precondition: ["foothold(source)", "credential(source)"]
+    postcondition: ["credential(target)"]
+
+    input:
+      from: source.id
+      identity: target.id
+      identity_type: target.type
+
+    output:
+      credential: target.id
+
+
+  - id: ACT_ABUSE_TRUST_RELATIONSHIP
+    name: Abuse a trust relationship
+    tactic: initial access
+    technique: T1199
+
+    summary: >
+      One resource is trusted by another and the attacker exercises that trust
+      rather than defeating a control.
+
+    applies_to:
+      edge_category: trust
+
+    precondition: ["foothold(source)", "credential(source)"]
+    postcondition: ["credential(target)"]
+
+    input:
+      trusted: source.id
+      trusting: target.id
+      evidence: target.evidence:privilege,trust
+
+    output:
+      credential: target.id
+
+
+  # ---------------------------------------------------------------------------
+  # PRIVILEGE ESCALATION — one identity reaching for a better one.
+  #
+  # Split by what the held permission actually lets the attacker do, because
+  # "privilege_escalation" as one step tells the scenario generator nothing. The
+  # three shapes come from data/privesc_methods.yaml, which is the Rhino Security
+  # Labs catalogue.
+  # ---------------------------------------------------------------------------
+
+  - id: ACT_WRITE_ROLE_POLICY
+    name: Grant yourself more permissions by writing a role policy
+    tactic: privilege escalation
+    technique: T1098.001
+
+    summary: >
+      The held identity can modify IAM policy, so it can grant itself, or
+      another principal, whatever it does not yet have.
+
+    applies_to:
+      edge_category: escalation
+
+    precondition:
+      facts: ["credential(source)"]
+      capabilities:
+        - end: source
+          source_id_prefix:
+            - PRIVESC_PUT_ROLE_POLICY
+            - PRIVESC_ATTACH_ROLE_POLICY
+            - PRIVESC_CREATE_POLICY_VERSION
+            - PRIVESC_SET_DEFAULT_POLICY_VERSION
+      # Rhino Security Labs' own `Required Permission(s)`, looked up per detected
+      # method in data/privesc_methods.yaml rather than restated here.
+      permissions: source.privesc
+    postcondition: ["credential(target)"]
+
+    input:
+      from_identity: source.id
+      to_identity: target.id
+      method: source.evidence:privilege
+
+    output:
+      credential: target.id
+      # Rhino states a ceiling, not a certainty: "privilege escalation to full
+      # administrator access" is what the permission makes possible.
+      privilege_ceiling: administrator
+
+    stop_after_match: true
+
+
+  - id: ACT_PASS_ROLE_TO_SERVICE
+    name: Pass a role to a service you control
+    tactic: privilege escalation
+    technique: T1098.003
+
+    summary: >
+      The held identity can hand a more privileged role to a compute or
+      automation service and then make that service act on its behalf. Needs a
+      passable role to exist, which is why the catalogue rates these lower than
+      a direct policy write.
+
+    applies_to:
+      edge_category: escalation
+
+    precondition:
+      facts: ["credential(source)"]
+      capabilities:
+        - end: source
+          source_id_prefix:
+            - PRIVESC_PASSROLE
+            - PRIVESC_SAGEMAKER
+            - PRIVESC_LAMBDA
+      permissions: source.privesc
+    postcondition: ["credential(target)"]
+
+    input:
+      from_identity: source.id
+      passed_role: target.id
+      method: source.evidence:privilege
+
+    output:
+      credential: target.id
+
+    stop_after_match: true
+
+
+  - id: ACT_ASSUME_ROLE_CHAIN
+    name: Assume the next role in a chain
+    tactic: privilege escalation
+    technique: T1548.005
+
+    summary: >
+      The generic escalation step: the held identity can become the next one.
+      Matches where no more specific method was detected.
+
+    applies_to:
+      edge_category: escalation
+
+    precondition:
+      facts: ["credential(source)"]
+      permissions: source.privesc
+    postcondition: ["credential(target)"]
+
+    input:
+      from_identity: source.id
+      to_identity: target.id
+      evidence: target.evidence:privilege
+
+    output:
+      credential: target.id
+
+
+  - id: ACT_HIJACK_COMPUTE
+    name: Take over compute that carries a role
+    tactic: defense impairment
+    technique: T1578.002
+
+    summary: >
+      Rather than obtaining a credential directly, the attacker takes over the
+      compute the credential is attached to. The gain is the ability to run code
+      there, not the credential itself.
+
+    applies_to:
+      edge_category: hijack
+
+    precondition:
+      facts: ["credential(source)"]
+      permissions: source.privesc
+    postcondition: ["foothold(target)"]
+
+    input:
+      from_identity: source.id
+      compute: target.id
+      compute_type: target.type
+
+    output:
+      session: target.id
+
+
+  # ---------------------------------------------------------------------------
+  # COLLECTION — using an identity to reach data.
+  #
+  # These sit on `capability` edges, which exist where a wildcard grant reaches a
+  # resource its policy never names. Split by what is at the far end, because
+  # reading a bucket and querying a database are different actions with different
+  # techniques and read very differently in a scenario.
+  # ---------------------------------------------------------------------------
+
+  - id: ACT_READ_CLOUD_STORAGE
+    name: Read data from cloud storage
+    tactic: collection
+    technique: T1530
+
+    summary: >
+      The held identity's permissions cover a storage bucket, so its objects can
+      be listed and read.
+
+    applies_to:
+      edge_category: capability
+      target_type:
+        - AWS::S3::Bucket
+
+    precondition: ["credential(source)"]
+    postcondition: ["data_access(target)"]
+
+    input:
+      identity: source.id
+      store: target.id
+      bucket_name: target.attr:bucket.name
+      evidence: target.evidence:exposure
+
+    output:
+      data_access: target.id
+      data_kind: object storage
+
+    stop_after_match: true
+
+
+  - id: ACT_QUERY_DATA_STORE
+    name: Query a database or table
+    tactic: collection
+    technique: T1213
+
+    summary: >
+      The held identity's permissions cover a database or table, so its contents
+      can be read.
+
+    applies_to:
+      edge_category: capability
+      target_type:
+        - AWS::RDS::DBInstance
+        - AWS::RDS::DBCluster
+        - AWS::DynamoDB::Table
+        - AWS::SecretsManager::Secret
+        - AWS::SSM::Parameter
+
+    precondition: ["credential(source)"]
+    postcondition: ["data_access(target)"]
+
+    input:
+      identity: source.id
+      store: target.id
+      store_type: target.type
+      evidence: target.evidence:exposure
+
+    output:
+      data_access: target.id
+      data_kind: structured records
+
+    stop_after_match: true
+
+
+  - id: ACT_ENUMERATE_RESOURCE
+    name: Enumerate a reachable resource
+    tactic: discovery
+    technique: T1580
+
+    summary: >
+      The held identity's permissions reach a resource that is not itself a data
+      store. What it yields is knowledge of the account rather than data.
+
+    applies_to:
+      edge_category: capability
+
+    precondition: ["credential(source)"]
+    postcondition: ["data_access(target)"]
+
+    input:
+      identity: source.id
+      resource: target.id
+      resource_type: target.type
+
+    output:
+      data_access: target.id
+      data_kind: configuration
+
+
+  # ---------------------------------------------------------------------------
+  # A plain declaration dependency. One resource names another and nothing about
+  # attacker capability follows from it, so this claims nothing: no precondition
+  # to satisfy, no postcondition gained. It stays walkable so the graph does not
+  # lose structure, and because it grants nothing a path cannot be built out of
+  # these alone.
+  # ---------------------------------------------------------------------------
+
+  - id: ACT_FOLLOW_CONFIGURATION_REFERENCE
+    name: Follow a configuration reference
+    tactic: discovery
+    technique: T1580
+
+    summary: >
+      One resource references another in its template. Recorded so the attack
+      graph keeps the same shape as the infrastructure, and granting nothing
+      because a reference is not an attacker capability.
+
+    applies_to:
+      edge_category: connection
+
+    precondition: []
+    postcondition: []
+
+    input:
+      from: source.id
+      to: target.id
+
+    output: {}

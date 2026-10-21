@@ -1,22 +1,4 @@
-"""
-Generic security rule engine.
-
-Pipeline:
-
-normalized resources
-        ↓
-attribute extraction
-        ↓
-rule indexing
-        ↓
-parameter resolution
-        ↓
-condition evaluator
-        ↓
-True / False
-        ↓
-security finding
-"""
+"""Generic security rule engine."""
 
 import yaml
 from collections import defaultdict
@@ -28,8 +10,6 @@ class RuleEngine:
 
     def __init__(self, rules_path):
 
-        # -----------------------------
-        # Load security rule knowledge
         # -----------------------------
 
         with open(rules_path, "r", encoding="utf-8") as f:
@@ -49,25 +29,11 @@ class RuleEngine:
             self.rules = [data]
 
         # -----------------------------
-        # Build resource-type index
-        # -----------------------------
 
         self.rule_index = self._build_index(self.rules)
 
     def _build_index(self, rules):
-        """
-        Hash-based rule index.
-
-        Example:
-
-        AWS::EC2::SecurityGroup
-                ↓
-        [rule1, rule2, rule3]
-
-        AWS::S3::Bucket
-                ↓
-        [rule4, rule5]
-        """
+        """Hash-based rule index."""
 
         index = defaultdict(list)
 
@@ -84,9 +50,7 @@ class RuleEngine:
         return index
 
     def evaluate_resource(self, resource):
-        """
-        Evaluate all rules applicable to one resource.
-        """
+        """Evaluate all rules applicable to one resource."""
 
         matches = []
 
@@ -100,13 +64,9 @@ class RuleEngine:
             try:
 
                 # -----------------------------
-                # Resolve rule parameters
-                # -----------------------------
 
                 parameters = self._get_parameters(rule)
 
-                # -----------------------------
-                # Resolve conditions
                 # -----------------------------
 
                 conditions = rule.get("conditions")
@@ -120,8 +80,6 @@ class RuleEngine:
                 )
 
                 # -----------------------------
-                # Evaluate condition tree
-                # -----------------------------
 
                 matched = evaluate_expression(
                     resource,
@@ -132,15 +90,7 @@ class RuleEngine:
 
                     state = rule.get("state")
 
-                    # New format:
-                    #
-                    # state:
-                    #   id: unrestricted_common_port_access
-                    #
-                    # Older format:
-                    #
-                    # state: some_state
-                    #
+                    # New format: the state is a dict carrying its id.
                     if isinstance(state, dict):
                         state_id = state.get("id")
                     else:
@@ -149,8 +99,21 @@ class RuleEngine:
                     matches.append({
                         "resource": resource.get("id"),
                         "rule_id": rule.get("id"),
+
+                        # The check this rule implements, without the origin and
+                        # resource type the composite id wraps it in. Carried
+                        # because the path layer has to make decisions about a
+                        # check rather than about one of its three per-type
+                        # copies: REQUIRED_TAGS is excluded from path roles by
+                        # this field, not by three composite ids.
+                        "source_id": rule.get("source_id") or rule.get("id"),
+
                         "state": state_id,
                         "semantic": rule.get("semantic"),
+
+                        # Absent on canonical rules, which do not declare one.
+                        # security_state_graph/semantics derives it from the semantic when it
+                        # is missing. See SEVERITY_BY_SEMANTIC there.
                         "severity": rule.get("severity")
                     })
 
@@ -166,10 +129,7 @@ class RuleEngine:
         return matches
 
     def evaluate_all(self, resources):
-        """
-        Evaluate every resource against
-        its applicable security rules.
-        """
+        """Evaluate every resource against the rules indexed for its type."""
 
         results = []
 
@@ -181,22 +141,22 @@ class RuleEngine:
         return results
 
     def _get_parameters(self, rule):
-        """
-        Extract parameters from parameter_schema.
+        """A rule's parameter defaults, in either of the two spellings.
 
-        Example:
-
-        blockedPort1:
-            default: 3389
-
-        becomes:
-
-        {
-            "blockedPort1": 3389
-        }
+        `parameters` is a plain name -> value mapping and is what the canonical
+        ruleset uses. `parameter_schema` is a list of descriptors carrying a
+        `default`, which is what the rules written on this branch use, and it
+        documents each value's type and reason. Both resolve to the same
+        substitution table, so a rule can be written either way and neither
+        format has to be rewritten to be adopted.
         """
 
         parameters = {}
+
+        declared = rule.get("parameters")
+
+        if isinstance(declared, dict):
+            parameters.update(declared)
 
         schema = rule.get("parameter_schema", [])
 
@@ -219,17 +179,7 @@ class RuleEngine:
         return parameters
 
     def _resolve_parameters(self, value, parameters):
-        """
-        Recursively replace:
-
-            "{blockedPort1}"
-
-        with:
-
-            3389
-
-        Works inside dictionaries and lists.
-        """
+        """Recursively replace {name} parameter references with their values."""
 
         if isinstance(value, dict):
 

@@ -1,1 +1,40 @@
+# Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets. API keys come from the environment or a local .env, never the repo.
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Written by `python3 -m runner.graph_runner` and main.py. Review sees the golden
+# copies under tests/, so a pipeline run never dirties the tree.
+/output/
+/data/infra_output.json
+
+# Model weights and archives. The LoRA adapter is shared outside git.
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.zip
+scenario_generation/fine_tuning/output/checkpoint-*/
+scenario_generation/fine_tuning/output/tokenizer.json
+
+# Scenario generation run outputs
+scenario_generation/dataset/raw/
+scenario_generation/dataset/inputs/
+scenario_generation/dataset/training_data_review.json
+scenario_generation/dataset_visualizations/
+scenario_generation/evaluation/evaluation_results.json
+scenario_generation/results/

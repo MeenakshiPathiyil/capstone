@@ -1,0 +1,25 @@
+{
+  "attacker_states": 22,
+  "actions": 19,
+  "entry_states": 7,
+  "distinct_techniques": 7,
+  "techniques": [
+    "T1098.001",
+    "T1098.003",
+    "T1190",
+    "T1213",
+    "T1530",
+    "T1550",
+    "T1552.005"
+  ],
+  "tactics": [
+    "collection",
+    "credential access",
+    "initial access",
+    "lateral movement",
+    "privilege escalation"
+  ],
+  "edges_from_the_fallback_table": 0,
+  "truncated": false,
+  "max_depth": 6
+}

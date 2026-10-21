@@ -1,0 +1,16 @@
+# Fine-tuning dependencies
+# Install with: pip install -r fine_tuning/requirements_finetune.txt
+#
+# Pinned to the stack that produced the shipped adapter (see output/README.md):
+#   Transformers 5.x, TRL 0.29.x, PEFT 0.18.x, datasets 4.x, torch 2.10, bnb 0.49.x.
+# The code branches on the TRL/transformers API differences (max_length vs
+# max_seq_length, processing_class vs tokenizer, the completion-only collator),
+# so nearby versions also work; these ranges are the verified-compatible set.
+
+torch>=2.4
+transformers>=5.0,<6
+trl>=0.29,<0.30
+peft>=0.18,<0.19
+datasets>=4.0,<5
+accelerate>=1.1
+bitsandbytes>=0.47,<0.50

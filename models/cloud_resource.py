@@ -1,6 +1,7 @@
 # this file represents one cloud resource
 class CloudResource:
-    def __init__(self, id, type, raw_properties, semantic_properties):
+    def __init__(self, id, type, raw_properties, semantic_properties,
+                 attributes=None):
         self.id = id
         # unique name like "WebServer"
 
@@ -10,6 +11,11 @@ class CloudResource:
         self.raw_properties = raw_properties
         self.semantic_properties = semantic_properties
 
+        self.attributes = attributes or {}
+        # the abstract vocabulary the rules are written against, projected by
+        # the parser (parser/attributes.py). Empty when the record predates
+        # projection, in which case rules fall back to raw property paths.
+
         self.connections = []
         # connections are edges
 
@@ -18,8 +24,27 @@ class CloudResource:
             "identity": "dependency",
             "network_control": "association",
             "trust": "trust",
-            "connection": "dependency"
+            "connection": "dependency",
+            "capability": "capability",
+            # A detected privilege escalation, and the hijack of compute that
+            # carries a role. See data/privesc_methods.yaml.
+            "escalation": "escalation",
+            "hijack": "escalation",
+            # Load balancer plumbing. An association like network_control: it
+            # governs how traffic reaches a resource, it does not depend on it.
+            "traffic_path": "association"
         }
+        # capability = a wildcard grant reaching a resource it never names,
+        # so it gets its own relation rather than passing as a dependency.
+
+        # one edge per target per relation_type. the flattener hands the
+        # same reference over more than once, so a repeat is dropped here.
+        for connection in self.connections:
+            if (
+                connection["target"] == target
+                and connection["type"] == relation_type
+            ):
+                return
 
         self.connections.append({
             "target": target,

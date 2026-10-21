@@ -1,9 +1,20 @@
-import yaml
+import argparse
 import json
+import sys
+from pathlib import Path
+
+import yaml
 
 # Configuration
-INPUT_FILE = "../sample_yamls/cloudformation5.yml"
-OUTPUT_FILE = "../normalized_resources.json"
+#
+# Resolved against this file, not the working directory. They used to be bare
+# relative paths read at import time, which meant the module only worked when run
+# from one directory and could not be imported at all — the benchmark had to
+# exec() the source to get at these functions.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+DEFAULT_INPUT = BASE_DIR / "sample_yamls" / "cloudformation5.yml"
+DEFAULT_OUTPUT = BASE_DIR / "data" / "normalized_resources.json"
 
 # Explicit mappings for common cloud fields
 KNOWN_FIELD_SEMANTICS = {
@@ -134,7 +145,7 @@ CloudFormationLoader.add_multi_constructor('!', unknown_constructor)
 
 
 def load_cloudformation_template(file_path):
-    
+
     # Load and parse a CloudFormation YAML template with error handling.
     try:
         with open(file_path, "r") as file:
@@ -144,16 +155,16 @@ def load_cloudformation_template(file_path):
         raise FileNotFoundError(
             f"CloudFormation template not found: {file_path}\n"
             f"Please ensure the file exists at the specified path."
-        )
+        ) from None
     except yaml.YAMLError as e:
         raise ValueError(
             f"Invalid YAML syntax in {file_path}:\n{e}\n"
             f"Please check the file for syntax errors."
-        )
+        ) from e
     except Exception as e:
         raise RuntimeError(
             f"Unexpected error loading {file_path}: {e}"
-        )
+        ) from e
 
 
 def normalize_scalar(value):
@@ -169,26 +180,6 @@ def normalize_scalar(value):
 
 
 # Load CloudFormation template with error handling
-data = load_cloudformation_template(INPUT_FILE)
-
-# print(json.dumps(data, indent=2))
-
-
-# Validation
-if "Resources" not in data:
-    raise ValueError("Missing Resources section")
-
-for resource_name, resource_data in data["Resources"].items():
-
-    if resource_data is None:
-        raise ValueError(f"{resource_name} is malformed or empty")
-
-    if "Type" not in resource_data:
-        raise ValueError(f"{resource_name} missing Type")
-
-    if "Properties" not in resource_data:
-        resource_data["Properties"] = {}
-
 
 # Handles realistic CloudFormation nesting
 def flatten_properties(data, parent_key=""):
@@ -306,27 +297,110 @@ def extract_semantic_properties(flat_properties, resource_type):
     return semantic_properties
 
 # Normalization Pipeline
-normalized_resources = []
 
-for resource_name, resource_data in data["Resources"].items():
 
-    raw_properties = resource_data["Properties"]
+def validate_template(data):
+    """Raise unless the template has the shape the normalizer needs."""
 
-    flat_properties = flatten_properties(raw_properties)
+    if not isinstance(data, dict) or "Resources" not in data:
+        raise ValueError("Missing Resources section")
 
-    semantic_properties = extract_semantic_properties(
-        flat_properties,
-        resource_data["Type"]
+    for resource_name, resource_data in data["Resources"].items():
+
+        if resource_data is None:
+            raise ValueError(f"{resource_name} is malformed or empty")
+
+        if "Type" not in resource_data:
+            raise ValueError(f"{resource_name} missing Type")
+
+        if "Properties" not in resource_data:
+            resource_data["Properties"] = {}
+
+    return data
+
+
+def normalize(data):
+    """A validated template as the normalized resource records."""
+
+    normalized_resources = []
+
+    for resource_name, resource_data in data["Resources"].items():
+
+        raw_properties = resource_data["Properties"]
+
+        flat_properties = flatten_properties(raw_properties)
+
+        semantic_properties = extract_semantic_properties(
+            flat_properties,
+            resource_data["Type"]
+        )
+
+        normalized_resources.append({
+            "id": resource_name,
+            "type": resource_data["Type"],
+            "raw_properties": raw_properties,
+            "semantic_properties": semantic_properties
+        })
+
+    return normalized_resources
+
+
+def parse(path=DEFAULT_INPUT):
+    """A CloudFormation template on disk as normalized resource records.
+
+    The one entry point worth importing. The abstract `attributes` the rules
+    read are projected later, by processing/attributes.py, when the pipeline
+    builds its infrastructure model.
+    """
+
+    return normalize(
+        validate_template(
+            load_cloudformation_template(str(path))
+        )
     )
 
-    normalized_resources.append({
-        "id": resource_name,
-        "type": resource_data["Type"],
-        "raw_properties": raw_properties,
-        "semantic_properties": semantic_properties
-    })
+
+def write(records, path=DEFAULT_OUTPUT):
+    """Write records as the JSON the infrastructure model reads."""
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(records, handle, indent=2)
+        handle.write("\n")
+
+    return path
 
 
-with open(OUTPUT_FILE, "w") as outfile:
-    json.dump(normalized_resources, outfile, indent=2)
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Normalize a CloudFormation template for the infra model"
+    )
 
+    parser.add_argument(
+        "--in",
+        dest="input_path",
+        default=str(DEFAULT_INPUT),
+        help="CloudFormation template to read (default: %(default)s)"
+    )
+
+    parser.add_argument(
+        "--out",
+        dest="output_path",
+        default=str(DEFAULT_OUTPUT),
+        help="Where to write normalized_resources.json (default: %(default)s)"
+    )
+
+    args = parser.parse_args(argv)
+
+    records = parse(args.input_path)
+
+    write(records, args.output_path)
+
+    print("Normalized %d resources -> %s" % (len(records), args.output_path))
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

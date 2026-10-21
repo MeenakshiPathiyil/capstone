@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: The prize. Nothing else in this file.
+
+Resources:
+
+  ReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: nested-fixture-reports
+
+Outputs:
+  ReportsBucket:
+    Value: !Ref ReportsBucket

@@ -1,0 +1,74 @@
+[
+  {
+    "state_id": "cloudtrail_not_enabled",
+    "display_name": "AWS CloudTrail is not enabled for the account",
+    "resource_type": "account",
+    "source_rule_id": "aws_config:CLOUD_TRAIL_ENABLED:account"
+  },
+  {
+    "state_id": "iam_password_policy_weak",
+    "display_name": "IAM password policy does not meet required security settings",
+    "resource_type": "account",
+    "source_rule_id": "aws_config:IAM_PASSWORD_POLICY:account"
+  },
+  {
+    "state_id": "rds_storage_unencrypted",
+    "display_name": "RDS storage is not encrypted",
+    "resource_type": "AWS::RDS::DBInstance",
+    "source_rule_id": "aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance"
+  },
+  {
+    "state_id": "required_tag_missing",
+    "display_name": "Required tag is missing",
+    "resource_type": "AWS::EC2::Instance",
+    "source_rule_id": "aws_config:REQUIRED_TAGS:AWS::EC2::Instance"
+  },
+  {
+    "state_id": "required_tag_missing",
+    "display_name": "Required tag is missing",
+    "resource_type": "AWS::RDS::DBInstance",
+    "source_rule_id": "aws_config:REQUIRED_TAGS:AWS::RDS::DBInstance"
+  },
+  {
+    "state_id": "required_tag_missing",
+    "display_name": "Required tag is missing",
+    "resource_type": "AWS::S3::Bucket",
+    "source_rule_id": "aws_config:REQUIRED_TAGS:AWS::S3::Bucket"
+  },
+  {
+    "state_id": "root_account_mfa_disabled",
+    "display_name": "Root account does not have MFA enabled",
+    "resource_type": "account",
+    "source_rule_id": "aws_config:ROOT_ACCOUNT_MFA_ENABLED:account"
+  },
+  {
+    "state_id": "s3_bucket_policy_untrusted_principal",
+    "display_name": "S3 bucket policy grants access outside the trusted principal set",
+    "resource_type": "AWS::S3::Bucket",
+    "source_rule_id": "aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket"
+  },
+  {
+    "state_id": "s3_bucket_public_access_allowed",
+    "display_name": "S3 bucket allows public access",
+    "resource_type": "AWS::S3::Bucket",
+    "source_rule_id": "aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket"
+  },
+  {
+    "state_id": "s3_bucket_public_read_allowed",
+    "display_name": "S3 bucket allows public read access",
+    "resource_type": "AWS::S3::Bucket",
+    "source_rule_id": "aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket"
+  },
+  {
+    "state_id": "sg_unrestricted_common_port",
+    "display_name": "Security group allows unrestricted incoming traffic on a restricted port",
+    "resource_type": "AWS::EC2::SecurityGroup",
+    "source_rule_id": "aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup"
+  },
+  {
+    "state_id": "sg_unrestricted_ssh",
+    "display_name": "Security group allows unrestricted SSH",
+    "resource_type": "AWS::EC2::SecurityGroup",
+    "source_rule_id": "aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup"
+  }
+]

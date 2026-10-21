@@ -1,0 +1,173 @@
+[
+  {
+    "source_id": "AP-001",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-002",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> InsecureS3Bucket",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-003",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-004",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-005",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1498 - Network Denial of Service, T1499 - Endpoint Denial of Service, T1489 - Service Stop",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Denial of service"
+  },
+  {
+    "source_id": "AP-006",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1098 - Account Manipulation, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1531 - Account Access Removal",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model",
+    "objective": "Identity takeover"
+  },
+  {
+    "source_id": "AP-007",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-008",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> InsecureS3Bucket",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-009",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-010",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-011",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-012",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance -> OverPermissiveInstanceProfile -> OverPermissiveRole -> ReportsTable",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-013",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> PublicRDS",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1078 - Valid Accounts, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1498 - Network Denial of Service, T1499 - Endpoint Denial of Service, T1489 - Service Stop",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Denial of service"
+  },
+  {
+    "source_id": "AP-014",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "CRITICAL",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1531 - Account Access Removal",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model",
+    "objective": "Identity takeover"
+  },
+  {
+    "source_id": "AP-015",
+    "source_name": "OpenSecurityGroup -> PublicEC2Instance",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "HIGH",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021 - Remote Services, T1021.007 - Remote Services: Cloud Services, T1498 - Network Denial of Service, T1499 - Endpoint Denial of Service, T1489 - Service Stop",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment",
+    "objective": "Denial of service"
+  },
+  {
+    "source_id": "AP-016",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> ReportsTable",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "HIGH",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1486 - Data Encrypted for Impact, T1485 - Data Destruction, T1490 - Inhibit System Recovery",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Ransomware or destruction"
+  },
+  {
+    "source_id": "AP-017",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole -> OverPermissiveRole -> ReportsTable",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "HIGH",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1199 - Trusted Relationship, T1648 - Serverless Execution, T1098 - Account Manipulation, T1098.001 - Account Manipulation: Additional Cloud Credentials, T1098.003 - Account Manipulation: Additional Cloud Roles, T1548.005 - Abuse Elevation Control Mechanism: Temporary Elevated Cloud Access, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1619 - Cloud Storage Object Discovery, T1021.007 - Remote Services: Cloud Services, T1530 - Data from Cloud Storage, T1537 - Transfer Data to Cloud Account",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model, File system / cloud storage / databases",
+    "objective": "Data theft"
+  },
+  {
+    "source_id": "AP-018",
+    "source_name": "AppSecurityGroup -> AppServerInstance -> AppInstanceProfile -> AppServerRole -> DeploymentRole",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "HIGH",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1648 - Serverless Execution, T1098 - Account Manipulation, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1531 - Account Access Removal",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment, OS / IAM permission model",
+    "objective": "Identity takeover"
+  },
+  {
+    "source_id": "AP-019",
+    "source_name": "AppSecurityGroup -> AppServerInstance",
+    "industry": "Information technology service activities (ISIC J62)",
+    "attack_level": "HIGH",
+    "techniques": "T1190 - Exploit Public-Facing Application, T1078.004 - Valid Accounts: Cloud Accounts, T1552.005 - Unsecured Credentials: Cloud Instance Metadata API, T1580 - Cloud Infrastructure Discovery, T1021.007 - Remote Services: Cloud Services, T1498 - Network Denial of Service, T1499 - Endpoint Denial of Service, T1489 - Service Stop",
+    "surfaces": "Internet-facing services / user endpoints, Application runtime environment",
+    "objective": "Denial of service"
+  }
+]

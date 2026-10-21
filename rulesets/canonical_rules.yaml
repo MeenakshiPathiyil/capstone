@@ -1,0 +1,479 @@
+- id: aws_config:RESTRICTED_INCOMING_TRAFFIC:AWS::EC2::SecurityGroup
+  origin: aws_config
+  source_id: RESTRICTED_INCOMING_TRAFFIC
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroup
+  semantic: network_control
+  state:
+    id: sg_unrestricted_common_port
+    display_name: Security group allows unrestricted incoming traffic on a restricted
+      port
+  summary: Security group allows unrestricted incoming TCP traffic on a restricted
+    port.
+  conditions:
+    operator: AND
+    operands:
+    - operator: null
+      operands: []
+      field: ingress.protocol
+      comparison: equals
+      value: tcp
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: ingress.port
+        comparison: equals
+        value: 20
+      - operator: null
+        operands: []
+        field: ingress.port
+        comparison: equals
+        value: 21
+      - operator: null
+        operands: []
+        field: ingress.port
+        comparison: equals
+        value: 3389
+      - operator: null
+        operands: []
+        field: ingress.port
+        comparison: equals
+        value: 3306
+      - operator: null
+        operands: []
+        field: ingress.port
+        comparison: equals
+        value: 4333
+      field: null
+      comparison: null
+      value: null
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: ingress.cidr
+        comparison: equals
+        value: 0.0.0.0/0
+      - operator: null
+        operands: []
+        field: ingress.cidr
+        comparison: equals
+        value: ::/0
+      field: null
+      comparison: null
+      value: null
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    blockedPort1: 20
+    blockedPort2: 21
+    blockedPort3: 3389
+    blockedPort4: 3306
+    blockedPort5: 4333
+  references:
+  - source: aws_config
+    id: RESTRICTED_INCOMING_TRAFFIC
+    url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html
+- id: aws_config:INCOMING_SSH_DISABLED:AWS::EC2::SecurityGroup
+  origin: aws_config
+  source_id: INCOMING_SSH_DISABLED
+  service: ec2
+  resource_type: AWS::EC2::SecurityGroup
+  semantic: network_control
+  state:
+    id: sg_unrestricted_ssh
+    display_name: Security group allows unrestricted SSH
+  summary: Security group allows unrestricted SSH ingress on port 22.
+  conditions:
+    operator: AND
+    operands:
+    - operator: null
+      operands: []
+      field: ingress.port
+      comparison: equals
+      value: 22
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: ingress.cidr
+        comparison: equals
+        value: 0.0.0.0/0
+      - operator: null
+        operands: []
+        field: ingress.cidr
+        comparison: equals
+        value: ::/0
+      field: null
+      comparison: null
+      value: null
+    field: null
+    comparison: null
+    value: null
+  parameters: {}
+  references:
+  - source: aws_config
+    id: INCOMING_SSH_DISABLED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-ssh.html
+- id: aws_config:S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: exposure
+  state:
+    id: s3_bucket_public_access_allowed
+    display_name: S3 bucket allows public access
+  summary: 'S3 bucket allows public access through bucket-level public access settings.
+
+    '
+  conditions:
+    operator: AND
+    operands:
+    - operator: null
+      operands: []
+      field: bucket.name
+      comparison: not_in
+      value: []
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.IgnorePublicAcls
+        comparison: equals
+        value: false
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.BlockPublicPolicy
+        comparison: equals
+        value: false
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.BlockPublicAcls
+        comparison: equals
+        value: false
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.RestrictPublicBuckets
+        comparison: equals
+        value: false
+      field: null
+      comparison: null
+      value: null
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    excludedPublicBuckets: []
+  references:
+  - source: aws_config
+    id: S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-level-public-access-prohibited.html
+- id: aws_config:IAM_PASSWORD_POLICY:account
+  origin: aws_config
+  source_id: IAM_PASSWORD_POLICY
+  service: aws
+  resource_type: account
+  semantic: capability
+  state:
+    id: iam_password_policy_weak
+    display_name: IAM password policy does not meet required security settings
+  summary: 'IAM account password policy does not satisfy the configured password security
+    requirements.
+
+    '
+  conditions:
+    operator: OR
+    operands:
+    - operator: null
+      operands: []
+      field: password_policy.RequireUppercaseCharacters
+      comparison: equals
+      value: false
+    - operator: null
+      operands: []
+      field: password_policy.RequireLowercaseCharacters
+      comparison: equals
+      value: false
+    - operator: null
+      operands: []
+      field: password_policy.RequireSymbols
+      comparison: equals
+      value: false
+    - operator: null
+      operands: []
+      field: password_policy.RequireNumbers
+      comparison: equals
+      value: false
+    - operator: null
+      operands: []
+      field: password_policy.MinimumPasswordLength
+      comparison: less_than
+      value: 14
+    - operator: null
+      operands: []
+      field: password_policy.PasswordReusePrevention
+      comparison: less_than
+      value: 24
+    - operator: null
+      operands: []
+      field: password_policy.MaxPasswordAge
+      comparison: greater_than
+      value: 90
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    RequireUppercaseCharacters: true
+    RequireLowercaseCharacters: true
+    RequireSymbols: true
+    RequireNumbers: true
+    MinimumPasswordLength: 14
+    PasswordReusePrevention: 24
+    MaxPasswordAge: 90
+  references:
+  - source: aws_config
+    id: IAM_PASSWORD_POLICY
+    url: https://docs.aws.amazon.com/config/latest/developerguide/iam-password-policy.html
+- id: aws_config:REQUIRED_TAGS:AWS::EC2::Instance
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: ec2
+  resource_type: AWS::EC2::Instance
+  semantic: capability
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+  summary: 'EC2 instance does not contain the required tag ''CostCenter''.
+
+    '
+  conditions:
+    operator: NOT
+    operands:
+    - operator: null
+      operands: []
+      field: tags
+      comparison: contains
+      value: CostCenter
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    tag1Key: CostCenter
+  references:
+  - source: aws_config
+    id: REQUIRED_TAGS
+    url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+- id: aws_config:REQUIRED_TAGS:AWS::S3::Bucket
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: capability
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+  summary: 'S3 bucket does not contain the required tag ''CostCenter''.
+
+    '
+  conditions:
+    operator: NOT
+    operands:
+    - operator: null
+      operands: []
+      field: tags
+      comparison: contains
+      value: CostCenter
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    tag1Key: CostCenter
+  references:
+  - source: aws_config
+    id: REQUIRED_TAGS
+    url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+- id: aws_config:REQUIRED_TAGS:AWS::RDS::DBInstance
+  origin: aws_config
+  source_id: REQUIRED_TAGS
+  service: rds
+  resource_type: AWS::RDS::DBInstance
+  semantic: capability
+  state:
+    id: required_tag_missing
+    display_name: Required tag is missing
+  summary: 'RDS DB instance does not contain the required tag ''CostCenter''.
+
+    '
+  conditions:
+    operator: NOT
+    operands:
+    - operator: null
+      operands: []
+      field: tags
+      comparison: contains
+      value: CostCenter
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    tag1Key: CostCenter
+  references:
+  - source: aws_config
+    id: REQUIRED_TAGS
+    url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+- id: aws_config:S3_BUCKET_PUBLIC_READ_PROHIBITED:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_PUBLIC_READ_PROHIBITED
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: exposure
+  state:
+    id: s3_bucket_public_read_allowed
+    display_name: S3 bucket allows public read access
+  summary: 'S3 bucket allows public read access through its bucket policy or bucket
+    ACL.
+
+    '
+  conditions:
+    operator: AND
+    operands:
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.BlockPublicPolicy
+        comparison: equals
+        value: true
+      - operator: null
+        operands: []
+        field: BucketPolicy.AllowsPublicRead
+        comparison: equals
+        value: false
+      field: null
+      comparison: null
+      value: null
+    - operator: OR
+      operands:
+      - operator: null
+        operands: []
+        field: PublicAccessBlockConfiguration.BlockPublicAcls
+        comparison: equals
+        value: true
+      - operator: null
+        operands: []
+        field: BucketAcl.AllowsPublicRead
+        comparison: equals
+        value: false
+      field: null
+      comparison: null
+      value: null
+    field: null
+    comparison: null
+    value: null
+  parameters: {}
+  references:
+  - source: aws_config
+    id: S3_BUCKET_PUBLIC_READ_PROHIBITED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-public-read-prohibited.html
+- id: aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance
+  origin: aws_config
+  source_id: RDS_STORAGE_ENCRYPTED
+  service: rds
+  resource_type: AWS::RDS::DBInstance
+  semantic: exposure
+  state:
+    id: rds_storage_unencrypted
+    display_name: RDS storage is not encrypted
+  summary: 'RDS DB instance storage is not encrypted.
+
+    '
+  conditions:
+    operator: AND
+    operands:
+    - operator: null
+      operands: []
+      field: StorageEncrypted
+      comparison: equals
+      value: false
+    field: null
+    comparison: null
+    value: null
+  parameters:
+    kmsKeyId: null
+  references:
+  - source: aws_config
+    id: RDS_STORAGE_ENCRYPTED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/rds-storage-encrypted.html
+- id: aws_config:ROOT_ACCOUNT_MFA_ENABLED:account
+  origin: aws_config
+  source_id: ROOT_ACCOUNT_MFA_ENABLED
+  service: aws
+  resource_type: account
+  semantic: identity
+  state:
+    id: root_account_mfa_disabled
+    display_name: Root account does not have MFA enabled
+  summary: Root account does not have multi-factor authentication (MFA) enabled.
+  conditions:
+    operator: null
+    operands: []
+    field: root_account.mfa_enabled
+    comparison: equals
+    value: false
+  parameters: {}
+  references:
+  - source: aws_config
+    id: ROOT_ACCOUNT_MFA_ENABLED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/root-account-mfa-enabled.html
+- id: aws_config:S3_BUCKET_POLICY_GRANTEE_CHECK:AWS::S3::Bucket
+  origin: aws_config
+  source_id: S3_BUCKET_POLICY_GRANTEE_CHECK
+  service: s3
+  resource_type: AWS::S3::Bucket
+  semantic: trust
+  state:
+    id: s3_bucket_policy_untrusted_principal
+    display_name: S3 bucket policy grants access outside the trusted principal set
+  summary: S3 bucket policy grants access to a principal outside the trusted set defined
+    by 203.0.113.0/24, 198.51.100.0/24.
+  conditions:
+    operator: null
+    operands: []
+    field: BucketPolicy.Grantee
+    comparison: not_in
+    value:
+    - 203.0.113.0/24
+    - 198.51.100.0/24
+  parameters:
+    ipAddresses:
+    - 203.0.113.0/24
+    - 198.51.100.0/24
+  references:
+  - source: aws_config
+    id: S3_BUCKET_POLICY_GRANTEE_CHECK
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-policy-grantee-check.html
+- id: aws_config:CLOUD_TRAIL_ENABLED:account
+  origin: aws_config
+  source_id: CLOUD_TRAIL_ENABLED
+  service: aws
+  resource_type: account
+  semantic: impact
+  state:
+    id: cloudtrail_not_enabled
+    display_name: AWS CloudTrail is not enabled for the account
+  summary: AWS CloudTrail is not enabled, reducing the account's ability to detect
+    and investigate a security incident.
+  conditions:
+    operator: null
+    operands: []
+    field: cloudtrail.enabled
+    comparison: equals
+    value: false
+  parameters: {}
+  references:
+  - source: aws_config
+    id: CLOUD_TRAIL_ENABLED
+    url: https://docs.aws.amazon.com/config/latest/developerguide/cloudtrail-enabled.html

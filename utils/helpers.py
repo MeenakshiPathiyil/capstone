@@ -1,13 +1,10 @@
+import json
+from pathlib import Path
+
 # Utility functions used across the system
 
 def normalize(value):
-    """
-    Normalize values into consistent types.
-
-    THEORY:
-    Cloud configs often store numbers/booleans as strings.
-    This solves the 'representation mismatch' problem.
-    """
+    """Normalize values into consistent types."""
 
     if isinstance(value, str):
         v = value.strip()
@@ -24,13 +21,7 @@ def normalize(value):
 
 
 def flatten_dict(d, parent_key="", sep="."):
-    """
-    Flatten nested dictionaries into key-value pairs.
-
-    THEORY:
-    This is 'attribute projection' — converting hierarchical data
-    into a flat structure so rules can match easily.
-    """
+    """Flatten nested dictionaries into key-value pairs."""
 
     items = {}
 
@@ -58,4 +49,24 @@ def flatten_dict(d, parent_key="", sep="."):
             # store normalized scalar value
             items[new_key] = normalize(v)
 
-    return items 
+    return items
+
+
+def write_json(payload, output_path):
+    r"""Write one JSON file, creating its directory. Returns the path.
+
+    Trailing newline, so the file is a well-formed text file and a golden-file
+    diff does not report "\ No newline at end of file".
+    """
+
+    output_path = Path(output_path)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w", encoding="utf-8") as handle:
+
+        json.dump(payload, handle, indent=2)
+
+        handle.write("\n")
+
+    return output_path

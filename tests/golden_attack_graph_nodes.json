@@ -1,0 +1,284 @@
+[
+  {
+    "id": "attacker",
+    "type": "attacker",
+    "resource": null,
+    "facts": [],
+    "depth": 0,
+    "is_entry": false
+  },
+  {
+    "id": "InsecureS3Bucket|data_access(InsecureS3Bucket),internet_reachable",
+    "resource": "InsecureS3Bucket",
+    "type": "AWS::S3::Bucket",
+    "facts": [
+      "data_access(InsecureS3Bucket)",
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "OpenSecurityGroup|internet_reachable",
+    "resource": "OpenSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "facts": [
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "PublicEC2Instance|foothold(PublicEC2Instance),internet_reachable",
+    "resource": "PublicEC2Instance",
+    "type": "AWS::EC2::Instance",
+    "facts": [
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "PublicRDS|data_access(PublicRDS),foothold(PublicRDS),internet_reachable",
+    "resource": "PublicRDS",
+    "type": "AWS::RDS::DBInstance",
+    "facts": [
+      "data_access(PublicRDS)",
+      "foothold(PublicRDS)",
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "OpenLoadBalancer|foothold(OpenLoadBalancer),internet_reachable",
+    "resource": "OpenLoadBalancer",
+    "type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "facts": [
+      "foothold(OpenLoadBalancer)",
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "AppSecurityGroup|internet_reachable",
+    "resource": "AppSecurityGroup",
+    "type": "AWS::EC2::SecurityGroup",
+    "facts": [
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "AppServerInstance|foothold(AppServerInstance),internet_reachable",
+    "resource": "AppServerInstance",
+    "type": "AWS::EC2::Instance",
+    "facts": [
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 0,
+    "is_entry": true
+  },
+  {
+    "id": "OverPermissiveInstanceProfile|credential(OverPermissiveInstanceProfile),foothold(PublicEC2Instance),internet_reachable",
+    "resource": "OverPermissiveInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "facts": [
+      "credential(OverPermissiveInstanceProfile)",
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 1,
+    "is_entry": false
+  },
+  {
+    "id": "AppInstanceProfile|credential(AppInstanceProfile),foothold(AppServerInstance),internet_reachable",
+    "resource": "AppInstanceProfile",
+    "type": "AWS::IAM::InstanceProfile",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 1,
+    "is_entry": false
+  },
+  {
+    "id": "OverPermissiveRole|credential(OverPermissiveInstanceProfile),credential(OverPermissiveRole),foothold(PublicEC2Instance),internet_reachable",
+    "resource": "OverPermissiveRole",
+    "type": "AWS::IAM::Role",
+    "facts": [
+      "credential(OverPermissiveInstanceProfile)",
+      "credential(OverPermissiveRole)",
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 2,
+    "is_entry": false
+  },
+  {
+    "id": "AppServerRole|credential(AppInstanceProfile),credential(AppServerRole),foothold(AppServerInstance),internet_reachable",
+    "resource": "AppServerRole",
+    "type": "AWS::IAM::Role",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 2,
+    "is_entry": false
+  },
+  {
+    "id": "InsecureS3Bucket|credential(OverPermissiveInstanceProfile),credential(OverPermissiveRole),data_access(InsecureS3Bucket),foothold(PublicEC2Instance),internet_reachable",
+    "resource": "InsecureS3Bucket",
+    "type": "AWS::S3::Bucket",
+    "facts": [
+      "credential(OverPermissiveInstanceProfile)",
+      "credential(OverPermissiveRole)",
+      "data_access(InsecureS3Bucket)",
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 3,
+    "is_entry": false
+  },
+  {
+    "id": "PublicRDS|credential(OverPermissiveInstanceProfile),credential(OverPermissiveRole),data_access(PublicRDS),foothold(PublicEC2Instance),internet_reachable",
+    "resource": "PublicRDS",
+    "type": "AWS::RDS::DBInstance",
+    "facts": [
+      "credential(OverPermissiveInstanceProfile)",
+      "credential(OverPermissiveRole)",
+      "data_access(PublicRDS)",
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 3,
+    "is_entry": false
+  },
+  {
+    "id": "ReportsTable|credential(OverPermissiveInstanceProfile),credential(OverPermissiveRole),data_access(ReportsTable),foothold(PublicEC2Instance),internet_reachable",
+    "resource": "ReportsTable",
+    "type": "AWS::DynamoDB::Table",
+    "facts": [
+      "credential(OverPermissiveInstanceProfile)",
+      "credential(OverPermissiveRole)",
+      "data_access(ReportsTable)",
+      "foothold(PublicEC2Instance)",
+      "internet_reachable"
+    ],
+    "depth": 3,
+    "is_entry": false
+  },
+  {
+    "id": "DeploymentRole|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),foothold(AppServerInstance),internet_reachable",
+    "resource": "DeploymentRole",
+    "type": "AWS::IAM::Role",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 3,
+    "is_entry": false
+  },
+  {
+    "id": "ReportsTable|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),data_access(ReportsTable),foothold(AppServerInstance),internet_reachable",
+    "resource": "ReportsTable",
+    "type": "AWS::DynamoDB::Table",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "data_access(ReportsTable)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 4,
+    "is_entry": false
+  },
+  {
+    "id": "OverPermissiveRole|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),credential(OverPermissiveRole),foothold(AppServerInstance),internet_reachable",
+    "resource": "OverPermissiveRole",
+    "type": "AWS::IAM::Role",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "credential(OverPermissiveRole)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 4,
+    "is_entry": false
+  },
+  {
+    "id": "AppServerRole|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),foothold(AppServerInstance),internet_reachable",
+    "resource": "AppServerRole",
+    "type": "AWS::IAM::Role",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 4,
+    "is_entry": false
+  },
+  {
+    "id": "InsecureS3Bucket|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),credential(OverPermissiveRole),data_access(InsecureS3Bucket),foothold(AppServerInstance),internet_reachable",
+    "resource": "InsecureS3Bucket",
+    "type": "AWS::S3::Bucket",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "credential(OverPermissiveRole)",
+      "data_access(InsecureS3Bucket)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 5,
+    "is_entry": false
+  },
+  {
+    "id": "PublicRDS|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),credential(OverPermissiveRole),data_access(PublicRDS),foothold(AppServerInstance),internet_reachable",
+    "resource": "PublicRDS",
+    "type": "AWS::RDS::DBInstance",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "credential(OverPermissiveRole)",
+      "data_access(PublicRDS)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 5,
+    "is_entry": false
+  },
+  {
+    "id": "ReportsTable|credential(AppInstanceProfile),credential(AppServerRole),credential(DeploymentRole),credential(OverPermissiveRole),data_access(ReportsTable),foothold(AppServerInstance),internet_reachable",
+    "resource": "ReportsTable",
+    "type": "AWS::DynamoDB::Table",
+    "facts": [
+      "credential(AppInstanceProfile)",
+      "credential(AppServerRole)",
+      "credential(DeploymentRole)",
+      "credential(OverPermissiveRole)",
+      "data_access(ReportsTable)",
+      "foothold(AppServerInstance)",
+      "internet_reachable"
+    ],
+    "depth": 5,
+    "is_entry": false
+  }
+]

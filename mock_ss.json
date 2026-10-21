@@ -1,9 +1,0 @@
-[
-  {
-    "resource": "InstanceSecurityGroup",
-    "rule_id": "SG_OPEN_SSH",
-    "state": "unrestricted_ssh_access",
-    "semantic": "exposure",
-    "severity": "high"
-  }
-]
