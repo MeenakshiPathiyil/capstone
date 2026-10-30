@@ -84,8 +84,9 @@ VALUE = "Value"
 # CloudFormation ids are alphanumeric, so it cannot collide with a real one.
 PREFIX_SEPARATOR = "."
 
-# "VPC.Outputs.PublicSubnets" — the shape !GetAtt collapses to once the loader has
-# turned the short form into a scalar.
+# "VPC.Outputs.PublicSubnets": the shape parser.infra_parser.resolve_intrinsics
+# gives `!GetAtt VPC.Outputs.PublicSubnets` and its JSON spelling
+# `{"Fn::GetAtt": ["VPC", "Outputs.PublicSubnets"]}` alike.
 OUTPUTS_MARKER = PREFIX_SEPARATOR + OUTPUTS + PREFIX_SEPARATOR
 
 SUFFIXES = (".yaml", ".yml", ".json", ".template")
@@ -235,8 +236,13 @@ def parse_merged(path, root=None, follow_stacks=True):
     return records, report
 
 
-def _merge(path, prefix, index, report, follow_stacks, depth, seen):
-    """Recursive worker. `seen` holds resolved paths, so a cycle terminates."""
+def _merge(path, prefix, index, report, follow_stacks, depth, seen, passed=()):
+    """Recursive worker. `seen` holds resolved paths, so a cycle terminates.
+
+    `passed` names the parameters the parent sets on this stack. Their Defaults
+    are not assumed, because the value passed wins, and a Ref to one is left as
+    the parameter's name for _parameter_substitutions to replace.
+    """
 
     resolved = Path(path).resolve()
 
@@ -249,7 +255,7 @@ def _merge(path, prefix, index, report, follow_stacks, depth, seen):
 
     seen = seen | {resolved}
 
-    template = validate_template(load_cloudformation_template(str(path)))
+    template = validate_template(load_cloudformation_template(str(path), passed))
 
     # -----------------------------
 
@@ -294,7 +300,8 @@ def _merge(path, prefix, index, report, follow_stacks, depth, seen):
         child_prefix = prefixed(prefix, stack_id)
 
         child_records = _merge(
-            child_path, child_prefix, index, report, follow_stacks, depth + 1, seen
+            child_path, child_prefix, index, report, follow_stacks, depth + 1, seen,
+            tuple(properties.get(PARAMETERS) or {})
         )
 
         if not child_records:

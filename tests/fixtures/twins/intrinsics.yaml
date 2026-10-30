@@ -1,0 +1,97 @@
+# One template in YAML short form. intrinsics.json is the same template in JSON
+# long form, and tests/test_intrinsics.py asserts the two parse to identical
+# records and findings. Each line is a minimal copy of a divergence found in a
+# real AWS sample template (aws-cloudformation-templates).
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SSHLocation:
+    Type: String
+    Default: 0.0.0.0/0
+  ALBScheme:
+    Type: String
+    Default: internet-facing
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  Subnets:
+    Type: CommaDelimitedList
+    Default: subnet-1, subnet-2
+  Environment:
+    Type: String
+    Default: prod
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-12345678
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+  IsNotDev: !Not [!Equals [!Ref Environment, dev]]
+  Both: !And [!Condition IsProd, !Or [!Condition IsNotDev, !Condition IsProd]]
+Resources:
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub '${AWS::StackName} ssh'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: ec2.amazonaws.com}
+            Action: sts:AssumeRole
+  Profile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Role]
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref Profile
+      SecurityGroupIds:
+        - !GetAtt InstanceSecurityGroup.GroupId
+        - !GetAtt [InstanceSecurityGroup, GroupId]
+      SubnetId: !Select [0, !Ref Subnets]
+      AvailabilityZone: !Select [0, !GetAZs ]
+      UserData: !Base64 {'Fn::Join': ['', ['#!/bin/bash', !Ref 'AWS::Region']]}
+      Tags:
+        - Key: Region
+          Value: !Ref AWS::Region
+        - Key: Ami
+          Value: !FindInMap [RegionMap, !Ref 'AWS::Region', AMI]
+        - Key: Shared
+          Value: !ImportValue SharedStackOutput
+        - Key: Parts
+          Value: !Join [',', !Split ['|', 'a|b']]
+        - Key: Cidr
+          Value: !Select [0, !Cidr ['10.0.0.0/16', 2, 8]]
+        - Key: Env
+          Value: !If [IsProd, !Ref Environment, !Ref 'AWS::NoValue']
+  LoggingBucket:
+    Type: AWS::S3::Bucket
+  LoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoggingBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: s3:PutObject
+            Resource: !Sub 'arn:${AWS::Partition}:s3:::${LoggingBucket}/*'
+  OriginALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: !Ref ALBScheme
+      SecurityGroups: [!GetAtt InstanceSecurityGroup.GroupId]
+      Subnets: !Ref Subnets

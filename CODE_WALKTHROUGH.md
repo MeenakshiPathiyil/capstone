@@ -79,6 +79,15 @@ crash a YAML parser; here it becomes the plain string `"Foo"`.
 a property whose value is the string `"OpenSecurityGroup"` and there is a resource
 called `OpenSecurityGroup`, that is an arrow.
 
+**`resolve_intrinsics(template)`** makes that true for every spelling. The JSON
+long form `{"Ref": "OpenSecurityGroup"}` and `!GetAtt OpenSecurityGroup.GroupId`
+also become `"OpenSecurityGroup"`, so a JSON template and its YAML twin draw the
+same arrows. A `Ref` to a parameter with a `Default` becomes the default, so
+`CidrIp: !Ref SSHLocation` with `Default: 0.0.0.0/0` reads as open SSH. That is
+an assumption, since the deployed value can differ; with no default the
+parameter's name stays. The docstring in `parser/infra_parser.py` lists every
+function.
+
 **`flatten_properties(data)`** turns nesting into dotted paths:
 
 ```python

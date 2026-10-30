@@ -113,6 +113,20 @@ parse("sample_yamls/cloudformation5.yml")
   becomes the plain string `"Foo"`. **That is what makes reference-matching work
   later**: if a property's value is the string `"Foo"` and there is a resource
   called `Foo`, that is an edge.
+- `resolve_intrinsics()` gives every intrinsic function one representation,
+  whichever way it is spelled (YAML `!Ref Foo` or long form `{"Ref": "Foo"}`, so
+  a YAML template and its JSON twin produce the same records):
+  - `Ref` to a resource, and `Fn::GetAtt` in all three spellings, become the
+    logical id `"Foo"`, so `!GetAtt Group.GroupId` draws the edge `!Ref Group`
+    draws. `!GetAtt Child.Outputs.Name` stays dotted for `parser/nested.py`.
+  - `Ref` to a parameter with a `Default` becomes that default, as a string.
+    This is an assumption (the deployed value can differ), made because the
+    default is what most stacks run with: `CidrIp: !Ref SSHLocation` with
+    `Default: 0.0.0.0/0` is open SSH. No default, an SSM parameter type, or a
+    value passed by a parent stack: the parameter's name stays.
+  - Pseudo parameters (`AWS::Region`, `AWS::AccountId`...) are never resolved.
+  - Every other function (`Fn::Sub`, `Fn::Join`, `Fn::If`...) becomes its
+    argument, unevaluated, with any reference inside it resolved.
 - `flatten_properties()` turns nested properties into dotted paths, so
   `{"Policies": [{"Action": "s3:*"}]}` becomes
   `{"Policies[0].Action": "s3:*"}`.
