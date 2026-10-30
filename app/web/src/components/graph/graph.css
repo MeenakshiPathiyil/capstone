@@ -1,0 +1,114 @@
+/*
+ * React Flow, restyled to the design system. Only base.css is loaded (layout
+ * rules, no look); everything visible is defined here or in the components.
+ */
+
+.graph-canvas .react-flow {
+  --xy-background-color: var(--surface);
+  font-family: var(--font-sans);
+}
+
+/* Keyboard focus on a node: the app's focus ring, offset from the box.
+   Not after a pointer press (lib/inputModality.ts). */
+.graph-canvas .react-flow__node:focus {
+  outline: none;
+}
+.graph-canvas .react-flow__node:focus-visible:not([data-modality='pointer'] *) {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.graph-canvas .react-flow__node-attacker:focus-visible:not([data-modality='pointer'] *) {
+  border-radius: 999px;
+}
+
+/* Controls: one bordered group of icon buttons, like the toolbar's. */
+.graph-canvas .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(24 24 27 / 0.04);
+}
+.graph-canvas .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+.graph-canvas .react-flow__controls-button:last-child {
+  border-right: 0;
+}
+.graph-canvas .react-flow__controls-button:hover {
+  background: var(--subtle);
+  color: var(--foreground);
+}
+.graph-canvas .react-flow__controls-button:focus-visible:not([data-modality='pointer'] *) {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.graph-canvas .react-flow__controls-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.graph-canvas .react-flow__controls-button svg {
+  max-width: 11px;
+  max-height: 11px;
+  fill: currentColor;
+}
+
+/* Minimap: a small bordered card. */
+.graph-canvas .react-flow__minimap {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(24 24 27 / 0.04);
+}
+
+/* React Flow's credit stays (MIT), set small and quiet. */
+.graph-canvas .react-flow__attribution {
+  background: transparent;
+  padding: 0 4px 2px;
+  font-size: 9px;
+  line-height: 12px;
+}
+.graph-canvas .react-flow__attribution a {
+  color: var(--faint);
+}
+.graph-canvas .react-flow__attribution a:hover {
+  color: var(--muted-foreground);
+}
+
+/* A node a search just found: a ring that fades. */
+.graph-spotlight {
+  animation: graph-spotlight 2.2s ease-out both;
+}
+@keyframes graph-spotlight {
+  0%,
+  55% {
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 0 0 4px var(--foreground);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px transparent,
+      0 0 0 4px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .graph-spotlight {
+    animation: none;
+    box-shadow:
+      0 0 0 2px var(--surface),
+      0 0 0 4px var(--foreground);
+  }
+}

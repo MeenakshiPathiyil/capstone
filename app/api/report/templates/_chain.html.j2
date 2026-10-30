@@ -1,0 +1,15 @@
+{#- One path as a row of resource boxes. Every box after the first carries the
+    arrow that leads into it, so a wrapped row starts with an arrow and reads
+    as a continuation. -#}
+<div class="chain">
+  {% for hop in path.hops %}
+  <div class="hop">
+    {% if not loop.first %}<span class="arrow">&#9654;</span>{% endif %}
+    <div class="box sev-{{ hop.severity }}{{ ' entry' if hop.entry }}" style="width: {{ path.box_mm }}mm">
+      <span class="box-id">{{ hop.id | breakable }}</span>
+      <span class="box-type">{{ hop.type }}</span>
+      <span class="box-sev">{{ "entry" ~ (" · " ~ hop.severity_label) if hop.entry else hop.severity_label }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>

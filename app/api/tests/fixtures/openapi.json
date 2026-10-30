@@ -1,0 +1,3024 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Capstone attack path analyser",
+    "description": "Upload a CloudFormation template; get its findings, ranked attack paths, graphs and fix impact.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/meta": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Get Meta",
+        "description": "Styles, enums, samples and limits the web app needs before anything else.",
+        "operationId": "get_meta_api_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Get Health",
+        "description": "Core readiness, plus the optional PDF and model capabilities.\n\nThe PDF probe runs once per app and is cached. Neither optional capability\ncan make `ok` false.",
+        "operationId": "get_health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses": {
+      "post": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Create Analysis",
+        "description": "Analyse one uploaded template and save the result.",
+        "operationId": "create_analysis_api_analyses_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_analysis_api_analyses_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analysis"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/sample": {
+      "post": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Create Sample Analysis",
+        "description": "Analyse one of the bundled samples (see GET /api/meta) and save the result.",
+        "operationId": "create_sample_analysis_api_analyses_sample_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analysis"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/{analysis_id}": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Get Analysis",
+        "description": "A saved analysis, as it was saved.",
+        "operationId": "get_analysis_api_analyses__analysis_id__get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analysis"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/{analysis_id}/graph": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Get Graph",
+        "description": "The resource graph (`state`) or the attacker-state graph (`attack`).",
+        "operationId": "get_graph_api_analyses__analysis_id__graph_get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "state",
+                "attack"
+              ],
+              "type": "string",
+              "default": "state",
+              "title": "View"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/{analysis_id}/fixes": {
+      "get": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Get Fixes",
+        "description": "Fix impact for this scope if it has been computed; 404 if not.",
+        "operationId": "get_fixes_api_analyses__analysis_id__fixes_get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,5}|all)$",
+              "description": "How many of the top selected paths to draw candidates from, or \"all\". A value that reaches the selected count is the same scope as \"all\".",
+              "default": "5",
+              "title": "Top"
+            },
+            "description": "How many of the top selected paths to draw candidates from, or \"all\". A value that reaches the selected count is the same scope as \"all\"."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixImpactResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "analyses"
+        ],
+        "summary": "Compute Fixes",
+        "description": "Compute fix impact for this scope, or return the saved result.\n\nEach candidate finding is suppressed in turn and the selected paths are\nfound again. That models removing the evidence, not a verified repair.",
+        "operationId": "compute_fixes_api_analyses__analysis_id__fixes_post",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,5}|all)$",
+              "description": "How many of the top selected paths to draw candidates from, or \"all\". A value that reaches the selected count is the same scope as \"all\".",
+              "default": "5",
+              "title": "Top"
+            },
+            "description": "How many of the top selected paths to draw candidates from, or \"all\". A value that reaches the selected count is the same scope as \"all\"."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FixImpactResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/{analysis_id}/paths/{source_id}/scenario": {
+      "get": {
+        "tags": [
+          "scenarios"
+        ],
+        "summary": "Get Scenario",
+        "description": "The path's scenario state: idle, queued, warming_up, running, done, cached\nor failed. Poll it while the status is queued, warming_up or running.",
+        "operationId": "get_scenario_api_analyses__analysis_id__paths__source_id__scenario_get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "scenarios"
+        ],
+        "summary": "Request Scenario",
+        "description": "Serve the cached scenario (200) or start or join a live generation (202).\n\nAfter a failure, POST again to start a new job; nothing is retried\nautomatically. 503 when live generation is unavailable and nothing is\ncached. Retry-After is sent only when waiting can help (queue full, quota\nexhausted, with the time to the reset when known); not when live generation\nis not configured or the Space is paused or broken. 429, with Retry-After,\nwhen this client has started too many live generations recently.",
+        "operationId": "request_scenario_api_analyses__analysis_id__paths__source_id__scenario_post",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioState"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A job is queued or running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analyses/{analysis_id}/report.pdf": {
+      "get": {
+        "tags": [
+          "report"
+        ],
+        "summary": "Get Report",
+        "description": "The saved analysis as a PDF security assessment.\n\nIncludes fix impact only when a result for the same scope was already\ncomputed (POST /fixes); otherwise the report says \"Impact estimates not\nincluded\". Scenarios appear only for paths that already have one cached.\nOne report renders at a time; another request meanwhile is 503 with\nRetry-After. A repeat of a finished report is served without rendering\nand does not count toward the per-client report limit (429).",
+        "operationId": "get_report_api_analyses__analysis_id__report_pdf_get",
+        "parameters": [
+          {
+            "name": "analysis_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Analysis Id"
+            }
+          },
+          {
+            "name": "top",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^([1-9][0-9]{0,5}|all)$",
+              "description": "How many of the top selected paths to detail, or \"all\". A value that reaches the selected count means all of them; at most 50 paths are detailed, and the report says when it shows fewer than were asked for. With no selected paths the report covers findings only.",
+              "default": "5",
+              "title": "Top"
+            },
+            "description": "How many of the top selected paths to detail, or \"all\". A value that reaches the selected count means all of them; at most 50 paths are detailed, and the report says when it shows fewer than were asked for. With no selected paths the report covers findings only."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The assessment as a PDF attachment, named attack-path-assessment-<template>-<analysis date>.pdf.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Analysis": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "input_name": {
+            "type": "string",
+            "title": "Input Name"
+          },
+          "input_sha256": {
+            "type": "string",
+            "title": "Input Sha256"
+          },
+          "industry": {
+            "type": "string",
+            "title": "Industry"
+          },
+          "min_level": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM"
+            ],
+            "title": "Min Level"
+          },
+          "analyser_commit": {
+            "type": "string",
+            "title": "Analyser Commit"
+          },
+          "schema_version": {
+            "type": "integer",
+            "title": "Schema Version"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/Resource"
+            },
+            "type": "array",
+            "title": "Resources"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "paths": {
+            "items": {
+              "$ref": "#/components/schemas/Path"
+            },
+            "type": "array",
+            "title": "Paths"
+          },
+          "top_fixes": {
+            "items": {
+              "$ref": "#/components/schemas/FixImpact"
+            },
+            "type": "array",
+            "title": "Top Fixes",
+            "default": []
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "nested_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NestedReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "input_name",
+          "input_sha256",
+          "industry",
+          "min_level",
+          "analyser_commit",
+          "schema_version",
+          "summary",
+          "resources",
+          "findings",
+          "paths",
+          "top_fixes",
+          "warnings",
+          "nested_report"
+        ],
+        "title": "Analysis"
+      },
+      "Body_create_analysis_api_analyses_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "A CloudFormation template."
+          },
+          "industry": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Industry"
+          },
+          "min_level": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM"
+            ],
+            "title": "Min Level",
+            "default": "HIGH"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "industry"
+        ],
+        "title": "Body_create_analysis_api_analyses_post"
+      },
+      "Connection": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "target",
+          "type",
+          "relation"
+        ],
+        "title": "Connection"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "description": "Every error body: one human-readable message."
+      },
+      "Evidence": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "value"
+        ],
+        "title": "Evidence"
+      },
+      "ExportRecord": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "source_name": {
+            "type": "string",
+            "title": "Source Name"
+          },
+          "industry": {
+            "type": "string",
+            "title": "Industry"
+          },
+          "attack_level": {
+            "type": "string",
+            "title": "Attack Level"
+          },
+          "techniques": {
+            "type": "string",
+            "title": "Techniques"
+          },
+          "surfaces": {
+            "type": "string",
+            "title": "Surfaces"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "source_name",
+          "industry",
+          "attack_level",
+          "techniques",
+          "surfaces",
+          "objective"
+        ],
+        "title": "ExportRecord",
+        "description": "The seven-key record the scenario generator reads, unchanged."
+      },
+      "Finding": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "resource": {
+            "type": "string",
+            "title": "Resource"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "semantic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "unknown"
+            ],
+            "title": "Severity"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/RuleInfo"
+          },
+          "on_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "On Paths"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "resource",
+          "resource_type",
+          "rule_id",
+          "source_id",
+          "state",
+          "semantic",
+          "severity",
+          "rule",
+          "on_paths"
+        ],
+        "title": "Finding"
+      },
+      "FixImpact": {
+        "properties": {
+          "finding_id": {
+            "type": "string",
+            "title": "Finding Id"
+          },
+          "selected_paths_removed": {
+            "type": "integer",
+            "title": "Selected Paths Removed"
+          },
+          "selected_paths_remaining": {
+            "type": "integer",
+            "title": "Selected Paths Remaining"
+          },
+          "selected_paths_added": {
+            "type": "integer",
+            "title": "Selected Paths Added"
+          },
+          "baseline_selected_paths": {
+            "type": "integer",
+            "title": "Baseline Selected Paths"
+          },
+          "removed_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed Ids"
+          },
+          "added_paths": {
+            "items": {
+              "$ref": "#/components/schemas/PathIdentity"
+            },
+            "type": "array",
+            "title": "Added Paths"
+          },
+          "scope_top": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Top"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "finding_id",
+          "selected_paths_removed",
+          "selected_paths_remaining",
+          "selected_paths_added",
+          "baseline_selected_paths",
+          "removed_ids",
+          "added_paths",
+          "scope_top"
+        ],
+        "title": "FixImpact",
+        "description": "What suppressing one finding does to the selected path set.\n\nSuppression models evidence removal, not a verified repair."
+      },
+      "FixImpactResult": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "scope_top": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Top"
+          },
+          "candidate_count": {
+            "type": "integer",
+            "title": "Candidate Count"
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/FixImpact"
+            },
+            "type": "array",
+            "title": "Results"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "scope_top",
+          "candidate_count",
+          "computed_at",
+          "results"
+        ],
+        "title": "FixImpactResult"
+      },
+      "GraphEdge": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "reversed": {
+            "type": "boolean",
+            "title": "Reversed"
+          },
+          "path_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Path Ids"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "tactic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tactic"
+          },
+          "technique": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technique"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "source",
+          "target",
+          "label",
+          "categories",
+          "reversed",
+          "path_ids",
+          "action_id",
+          "tactic",
+          "technique"
+        ],
+        "title": "GraphEdge"
+      },
+      "GraphNode": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label_lines": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Label Lines"
+          },
+          "style": {
+            "type": "string",
+            "title": "Style"
+          },
+          "is_entry": {
+            "type": "boolean",
+            "title": "Is Entry"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label_lines",
+          "style",
+          "is_entry",
+          "resource",
+          "facts"
+        ],
+        "title": "GraphNode"
+      },
+      "GraphView": {
+        "properties": {
+          "view": {
+            "type": "string",
+            "enum": [
+              "state",
+              "attack"
+            ],
+            "title": "View"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/GraphEdge"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "dropped_edges": {
+            "type": "integer",
+            "title": "Dropped Edges"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "view",
+          "nodes",
+          "edges",
+          "dropped_edges",
+          "truncated",
+          "warnings"
+        ],
+        "title": "GraphView"
+      },
+      "Health": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "weasyprint": {
+            "type": "boolean",
+            "title": "Weasyprint"
+          },
+          "pdf_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf Unavailable Reason"
+          },
+          "space_configured": {
+            "type": "boolean",
+            "title": "Space Configured"
+          },
+          "space_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Space Stage"
+          },
+          "model_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Unavailable Reason"
+          },
+          "gpu_quota_remaining_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Quota Remaining S"
+          },
+          "gpu_quota_resets_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gpu Quota Resets At"
+          },
+          "est_generations_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Est Generations Left"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok",
+          "weasyprint",
+          "pdf_unavailable_reason",
+          "space_configured",
+          "space_stage",
+          "model_unavailable_reason",
+          "gpu_quota_remaining_s",
+          "gpu_quota_resets_at",
+          "est_generations_left"
+        ],
+        "title": "Health"
+      },
+      "Limits": {
+        "properties": {
+          "max_upload_bytes": {
+            "type": "integer",
+            "title": "Max Upload Bytes"
+          },
+          "max_resources": {
+            "type": "integer",
+            "title": "Max Resources"
+          },
+          "accepted_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Accepted Extensions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "max_upload_bytes",
+          "max_resources",
+          "accepted_extensions"
+        ],
+        "title": "Limits"
+      },
+      "Meta": {
+        "properties": {
+          "severity_styles": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Style"
+            },
+            "type": "object",
+            "title": "Severity Styles"
+          },
+          "attack_levels": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "CRITICAL",
+                "HIGH",
+                "MEDIUM"
+              ]
+            },
+            "type": "array",
+            "title": "Attack Levels"
+          },
+          "objectives": {
+            "items": {
+              "$ref": "#/components/schemas/ObjectiveMeta"
+            },
+            "type": "array",
+            "title": "Objectives"
+          },
+          "industries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Industries"
+          },
+          "default_industry": {
+            "type": "string",
+            "title": "Default Industry"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/Sample"
+            },
+            "type": "array",
+            "title": "Samples"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/Limits"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "severity_styles",
+          "attack_levels",
+          "objectives",
+          "industries",
+          "default_industry",
+          "samples",
+          "limits"
+        ],
+        "title": "Meta"
+      },
+      "NestedMerged": {
+        "properties": {
+          "stack": {
+            "type": "string",
+            "title": "Stack"
+          },
+          "template": {
+            "type": "string",
+            "title": "Template"
+          },
+          "resources": {
+            "type": "integer",
+            "title": "Resources"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stack",
+          "template",
+          "resources"
+        ],
+        "title": "NestedMerged"
+      },
+      "NestedReport": {
+        "properties": {
+          "merged": {
+            "items": {
+              "$ref": "#/components/schemas/NestedMerged"
+            },
+            "type": "array",
+            "title": "Merged"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/NestedSkipped"
+            },
+            "type": "array",
+            "title": "Skipped"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "merged",
+          "skipped"
+        ],
+        "title": "NestedReport"
+      },
+      "NestedSkipped": {
+        "properties": {
+          "stack": {
+            "type": "string",
+            "title": "Stack"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stack",
+          "reason",
+          "url"
+        ],
+        "title": "NestedSkipped"
+      },
+      "ObjectiveMeta": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "base_weight": {
+            "type": "number",
+            "title": "Base Weight"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "base_weight"
+        ],
+        "title": "ObjectiveMeta"
+      },
+      "Path": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "exported": {
+            "type": "boolean",
+            "title": "Exported"
+          },
+          "entry_id": {
+            "type": "string",
+            "title": "Entry Id"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "hops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hops"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "public_entry": {
+            "type": "boolean",
+            "title": "Public Entry"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          },
+          "objective_name": {
+            "type": "string",
+            "title": "Objective Name"
+          },
+          "objective_techniques": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Objective Techniques"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "attack_level": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM"
+            ],
+            "title": "Attack Level"
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ScoreBreakdown"
+          },
+          "chain_group": {
+            "type": "integer",
+            "title": "Chain Group"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "finding_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Finding Ids"
+          },
+          "export": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExportRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PathRisk"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "rank",
+          "exported",
+          "entry_id",
+          "target_id",
+          "hops",
+          "length",
+          "public_entry",
+          "objective",
+          "objective_name",
+          "objective_techniques",
+          "score",
+          "attack_level",
+          "breakdown",
+          "chain_group",
+          "steps",
+          "finding_ids",
+          "export",
+          "risk"
+        ],
+        "title": "Path"
+      },
+      "PathIdentity": {
+        "properties": {
+          "hops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hops"
+          },
+          "objective": {
+            "type": "string",
+            "title": "Objective"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "hops",
+          "objective"
+        ],
+        "title": "PathIdentity"
+      },
+      "PathRisk": {
+        "properties": {
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "impact": {
+            "type": "number",
+            "title": "Impact"
+          },
+          "exposure": {
+            "type": "number",
+            "title": "Exposure"
+          },
+          "path_ease": {
+            "type": "number",
+            "title": "Path Ease"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "reachability": {
+            "type": "string",
+            "enum": [
+              "direct",
+              "via_path",
+              "post_compromise"
+            ],
+            "title": "Reachability"
+          },
+          "downstream_count": {
+            "type": "integer",
+            "title": "Downstream Count"
+          },
+          "graph_median": {
+            "type": "number",
+            "title": "Graph Median"
+          },
+          "asset_criticality": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Asset Criticality"
+          },
+          "sensitive_data": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sensitive Data"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "prod",
+                  "dev",
+                  "test"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "score",
+          "impact",
+          "exposure",
+          "path_ease",
+          "rank",
+          "reachability",
+          "downstream_count",
+          "graph_median",
+          "asset_criticality",
+          "sensitive_data",
+          "environment"
+        ],
+        "title": "PathRisk",
+        "description": "The contextual risk model's second opinion on a path (risk_scoring/).\n\nIt does not change the path's score, level, rank or export. Its weights are\nprovisional and uncalibrated."
+      },
+      "Reference": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "id",
+          "url"
+        ],
+        "title": "Reference"
+      },
+      "Remediation": {
+        "properties": {
+          "fix": {
+            "type": "string",
+            "title": "Fix"
+          },
+          "snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snippet"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fix",
+          "snippet",
+          "url"
+        ],
+        "title": "Remediation"
+      },
+      "RequiredCapability": {
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_id_prefix": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id Prefix"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "semantic": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "end",
+          "source_id",
+          "source_id_prefix",
+          "state",
+          "semantic"
+        ],
+        "title": "RequiredCapability"
+      },
+      "Resource": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "max_severity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "critical",
+                  "high",
+                  "medium",
+                  "low",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Severity"
+          },
+          "is_entry": {
+            "type": "boolean",
+            "title": "Is Entry"
+          },
+          "entry_reason": {
+            "type": "string",
+            "title": "Entry Reason"
+          },
+          "findings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Findings"
+          },
+          "attributes": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Attributes"
+          },
+          "raw_properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw Properties"
+          },
+          "connections": {
+            "items": {
+              "$ref": "#/components/schemas/Connection"
+            },
+            "type": "array",
+            "title": "Connections"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "max_severity",
+          "is_entry",
+          "entry_reason",
+          "findings",
+          "attributes",
+          "raw_properties",
+          "connections"
+        ],
+        "title": "Resource"
+      },
+      "RuleInfo": {
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "title": "Rule Id"
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "attack_techniques": {
+            "items": {
+              "$ref": "#/components/schemas/Technique"
+            },
+            "type": "array",
+            "title": "Attack Techniques"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/Reference"
+            },
+            "type": "array",
+            "title": "References"
+          },
+          "remediation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Remediation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_id",
+          "source_id",
+          "display_name",
+          "summary",
+          "attack_techniques",
+          "references",
+          "remediation"
+        ],
+        "title": "RuleInfo"
+      },
+      "Sample": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "single",
+              "nested"
+            ],
+            "title": "Kind"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "kind"
+        ],
+        "title": "Sample"
+      },
+      "SampleRequest": {
+        "properties": {
+          "sample_id": {
+            "type": "string",
+            "title": "Sample Id"
+          },
+          "industry": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Industry"
+          },
+          "min_level": {
+            "type": "string",
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM"
+            ],
+            "title": "Min Level",
+            "default": "HIGH"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sample_id",
+          "industry"
+        ],
+        "title": "SampleRequest"
+      },
+      "Scenario": {
+        "properties": {
+          "cache_key": {
+            "type": "string",
+            "title": "Cache Key"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "pregenerated",
+              "live"
+            ],
+            "title": "Source"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "sections": {
+            "$ref": "#/components/schemas/ScenarioSections"
+          },
+          "reached_token_cap": {
+            "type": "boolean",
+            "title": "Reached Token Cap"
+          },
+          "hit_eos": {
+            "type": "boolean",
+            "title": "Hit Eos"
+          },
+          "new_tokens": {
+            "type": "integer",
+            "title": "New Tokens"
+          },
+          "max_new_tokens": {
+            "type": "integer",
+            "title": "Max New Tokens"
+          },
+          "finish_reason": {
+            "type": "string",
+            "enum": [
+              "eos",
+              "length",
+              "other"
+            ],
+            "title": "Finish Reason"
+          },
+          "seconds": {
+            "type": "number",
+            "title": "Seconds"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "model_revision": {
+            "type": "string",
+            "title": "Model Revision"
+          },
+          "adapter_repo": {
+            "type": "string",
+            "title": "Adapter Repo"
+          },
+          "adapter_revision": {
+            "type": "string",
+            "title": "Adapter Revision"
+          },
+          "loading_recipe": {
+            "type": "string",
+            "title": "Loading Recipe"
+          },
+          "prompt_version": {
+            "type": "string",
+            "title": "Prompt Version"
+          },
+          "generation_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Generation Config"
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Generated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cache_key",
+          "source",
+          "text",
+          "sections",
+          "reached_token_cap",
+          "hit_eos",
+          "new_tokens",
+          "max_new_tokens",
+          "finish_reason",
+          "seconds",
+          "model_id",
+          "model_revision",
+          "adapter_repo",
+          "adapter_revision",
+          "loading_recipe",
+          "prompt_version",
+          "generation_config",
+          "generated_at"
+        ],
+        "title": "Scenario"
+      },
+      "ScenarioSections": {
+        "properties": {
+          "natural_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Natural Language"
+          },
+          "mathematical": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mathematical"
+          },
+          "attack_graph": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attack Graph"
+          },
+          "preamble": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preamble"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "natural_language",
+          "mathematical",
+          "attack_graph",
+          "preamble",
+          "missing"
+        ],
+        "title": "ScenarioSections"
+      },
+      "ScenarioState": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "cached",
+              "queued",
+              "warming_up",
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "elapsed_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed S"
+          },
+          "eta_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eta S"
+          },
+          "scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Scenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "queue_position",
+          "elapsed_s",
+          "eta_s",
+          "scenario",
+          "error"
+        ],
+        "title": "ScenarioState"
+      },
+      "ScoreBreakdown": {
+        "properties": {
+          "severity_total": {
+            "type": "number",
+            "title": "Severity Total"
+          },
+          "objective_weight": {
+            "type": "number",
+            "title": "Objective Weight"
+          },
+          "hops": {
+            "type": "integer",
+            "title": "Hops"
+          },
+          "length_factor": {
+            "type": "number",
+            "title": "Length Factor"
+          },
+          "public_entry": {
+            "type": "boolean",
+            "title": "Public Entry"
+          },
+          "boost": {
+            "type": "number",
+            "title": "Boost"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "threshold_high": {
+            "type": "number",
+            "title": "Threshold High"
+          },
+          "threshold_critical": {
+            "type": "number",
+            "title": "Threshold Critical"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "severity_total",
+          "objective_weight",
+          "hops",
+          "length_factor",
+          "public_entry",
+          "boost",
+          "score",
+          "threshold_high",
+          "threshold_critical"
+        ],
+        "title": "ScoreBreakdown"
+      },
+      "Step": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation"
+          },
+          "action_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action Id"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "tactic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tactic"
+          },
+          "technique": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technique"
+          },
+          "technique_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technique Name"
+          },
+          "precondition": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Precondition"
+          },
+          "precondition_options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Precondition Options"
+          },
+          "postcondition": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Postcondition"
+          },
+          "required_permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Permissions"
+          },
+          "required_capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/RequiredCapability"
+            },
+            "type": "array",
+            "title": "Required Capabilities"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence"
+          },
+          "output": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Output"
+          },
+          "fallback": {
+            "type": "boolean",
+            "title": "Fallback"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "category",
+          "relation",
+          "action_id",
+          "action",
+          "tactic",
+          "technique",
+          "technique_name",
+          "precondition",
+          "precondition_options",
+          "postcondition",
+          "required_permissions",
+          "required_capabilities",
+          "evidence",
+          "output",
+          "fallback"
+        ],
+        "title": "Step"
+      },
+      "Style": {
+        "properties": {
+          "fill": {
+            "type": "string",
+            "title": "Fill"
+          },
+          "stroke": {
+            "type": "string",
+            "title": "Stroke"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fill",
+          "stroke"
+        ],
+        "title": "Style"
+      },
+      "Summary": {
+        "properties": {
+          "resources": {
+            "type": "integer",
+            "title": "Resources"
+          },
+          "edges": {
+            "type": "integer",
+            "title": "Edges"
+          },
+          "findings": {
+            "type": "integer",
+            "title": "Findings"
+          },
+          "findings_by_severity": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low",
+                "unknown"
+              ]
+            },
+            "type": "object",
+            "title": "Findings By Severity"
+          },
+          "paths": {
+            "type": "integer",
+            "title": "Paths"
+          },
+          "paths_exported": {
+            "type": "integer",
+            "title": "Paths Exported"
+          },
+          "paths_by_level": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "CRITICAL",
+                "HIGH",
+                "MEDIUM"
+              ]
+            },
+            "type": "object",
+            "title": "Paths By Level"
+          },
+          "entry_points": {
+            "type": "integer",
+            "title": "Entry Points"
+          },
+          "top_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Score"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resources",
+          "edges",
+          "findings",
+          "findings_by_severity",
+          "paths",
+          "paths_exported",
+          "paths_by_level",
+          "entry_points",
+          "top_score"
+        ],
+        "title": "Summary"
+      },
+      "Technique": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Technique"
+      },
+      "Warning": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "orphan_finding",
+              "rule_error",
+              "nested_skipped",
+              "transform_unexpanded",
+              "graph_truncated",
+              "graph_mapping",
+              "depth_limit"
+            ],
+            "title": "Kind"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "title": "Warning"
+      }
+    }
+  }
+}

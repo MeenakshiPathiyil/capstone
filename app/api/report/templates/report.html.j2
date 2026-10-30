@@ -1,0 +1,580 @@
+{#- The security assessment. Every value is autoescaped; see pdf.build_context. -#}
+{%- macro sev(key, label=None) -%}
+<span class="badge sev-{{ key }}">{{ label or key }}</span>
+{%- endmacro -%}
+{%- macro level(key) -%}
+<span class="badge level sev-{{ level_style[key] }}">{{ key }}</span>
+{%- endmacro -%}
+{%- macro chain_text(hops) -%}
+{% for hop in hops %}{% if not loop.first %} &rarr; {% endif %}<span class="id">{{ hop | soft_id }}</span>{% endfor %}
+{%- endmacro -%}
+{%- macro remediation_body(remediation) -%}
+{% if remediation %}
+<p class="fix">{{ remediation.fix }}</p>
+{% if remediation.snippet %}<pre class="snippet">{{ remediation.snippet.rstrip() }}</pre>{% endif %}
+<p class="fix-link"><a href="{{ remediation.url }}">{{ remediation.url }}</a></p>
+{% else %}
+<p class="fix muted">No remediation guidance is catalogued for this check yet.</p>
+{% endif %}
+{%- endmacro -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }} - {{ analysis.template }}</title>
+<meta name="author" content="Capstone attack path analyser">
+<meta name="description" content="Attack path assessment of {{ analysis.template }} (sha256 {{ analysis.sha256 }})">
+<meta name="generator" content="Capstone attack path analyser {{ analysis.commit }}">
+<style>
+{% for key, style in styles.items() %}
+.sev-{{ key }} { --fill: {{ style.fill }}; --stroke: {{ style.stroke }}; }
+{% endfor %}
+</style>
+</head>
+<body>
+
+{# ======================================================================= #}
+{# 1. Cover                                                                 #}
+{# ======================================================================= #}
+<section class="cover">
+
+  <p class="eyebrow">Security assessment <span class="dot">&middot;</span> <span class="footer-date">{{ analysis.date }}</span></p>
+
+  <h1 class="cover-title">{{ title }}</h1>
+
+  <p class="cover-template footer-template" data-short="{{ analysis.template_short }}">{{ analysis.template | soft_id }}</p>
+
+  <p class="cover-lede">
+    A static analysis of the CloudFormation template above for chains of
+    weaknesses an attacker could follow from an internet-facing resource to
+    data, identities or compute.
+  </p>
+
+  <p class="cover-counts">
+    <span class="count-item"><strong>{{ summary.findings | plural("finding") }}</strong></span>
+    <span class="sep">&middot;</span>
+    <span class="count-item"><strong>{{ summary.paths | plural("attack path") }}</strong>
+      {%- if summary.paths %} ({{ summary.paths_exported }} at {{ analysis.min_level }} or above){% endif %}</span>
+    <span class="sep">&middot;</span>
+    <span class="count-item"><strong>{{ summary.entry_points | plural("entry point") }}</strong></span>
+  </p>
+
+  <div class="strips">
+    <div class="strip">
+      <p class="strip-title">Attack paths by level</p>
+      <div class="bar-track">
+        {% for item in level_strip if item.count %}
+        <div class="bar sev-{{ item.style }}" style="width: {{ item.pct }}%"></div>
+        {% endfor %}
+      </div>
+      <table class="legend">
+        <tr>
+        {% for item in level_strip %}
+          <td class="{{ 'zero' if not item.count }}">
+            <span class="swatch sev-{{ item.style }}"></span><span class="legend-n">{{ item.count }}</span> {{ item.label }}
+          </td>
+        {% endfor %}
+        </tr>
+      </table>
+    </div>
+    <div class="strip">
+      <p class="strip-title">Findings by severity</p>
+      <div class="bar-track">
+        {% for item in finding_strip if item.count %}
+        <div class="bar sev-{{ item.style }}" style="width: {{ item.pct }}%"></div>
+        {% endfor %}
+      </div>
+      <table class="legend">
+        <tr>
+        {% for item in finding_strip %}
+          <td class="{{ 'zero' if not item.count }}">
+            <span class="swatch sev-{{ item.style }}"></span><span class="legend-n">{{ item.count }}</span> {{ item.label }}
+          </td>
+        {% endfor %}
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="meta">
+    <tr><th>Template</th><td class="id">{{ analysis.template | soft_id }}</td></tr>
+    <tr><th>SHA-256</th><td class="mono hash">{{ analysis.sha256 }}</td></tr>
+    <tr><th>Industry</th><td>{{ analysis.industry }}</td></tr>
+    <tr><th>Risk threshold</th><td>Paths at {{ analysis.min_level }} or above are selected</td></tr>
+    <tr><th>Paths in this report</th><td>{{ scope.label }}{% if scope.cap_note %}<br><span class="small muted">{{ scope.cap_note }}</span>{% endif %}</td></tr>
+    <tr><th>Analysed</th><td>{{ analysis.analysed }}</td></tr>
+    <tr><th>Report generated</th><td>{{ analysis.generated }}</td></tr>
+    <tr><th>Analyser</th><td class="mono"><span class="footer-commit">{{ analysis.commit }}</span></td></tr>
+    <tr><th>Analysis ID</th><td class="mono">{{ analysis.id }}</td></tr>
+  </table>
+
+  <nav class="contents">
+    <p class="contents-title">Contents</p>
+    {% set half = (sections | length + 1) // 2 %}
+    <table class="toc">
+      {% for index in range(half) %}
+      <tr>
+        {% for section in [sections[index], sections[index + half] if index + half < sections | length else none] %}
+        {% if section %}
+        <td class="toc-n">{{ section.number }}</td>
+        <td class="toc-title"><a href="#{{ section.id }}">{{ section.title }}</a></td>
+        <td class="toc-page"><a class="page-ref" href="#{{ section.id }}"></a></td>
+        {% else %}
+        <td class="toc-n"></td><td class="toc-title"></td><td class="toc-page"></td>
+        {% endif %}
+        {% if loop.first %}<td class="toc-spacer"></td>{% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </table>
+  </nav>
+
+  <p class="cover-note">
+    Based only on the template as written. No AWS account was accessed and
+    nothing was deployed. Read section {{ numbers.method }} for the method and
+    its limits before acting on the scores.
+  </p>
+</section>
+
+{# ======================================================================= #}
+{# 2. Executive summary                                                     #}
+{# ======================================================================= #}
+<section class="section" id="summary">
+<h2><span class="h2-num">{{ numbers.summary }}</span> <span class="h2-title">Executive summary</span></h2>
+
+{% set severity_parts = [] %}
+{% for item in finding_strip if item.count %}{% set _ = severity_parts.append(item.count ~ " " ~ item.label) %}{% endfor %}
+<p class="lede">
+  The template defines {{ summary.resources | plural("resource") }}{{ " connected by " ~ (summary.edges | plural("dependency edge")) if summary.edges else " and no dependency edges" }}.
+  The analyser raised {{ summary.findings | plural("finding") }}{{ " (" ~ (severity_parts | join(", ")) ~ ")" if severity_parts else "" }}
+  {% if summary.paths %}
+  and found {{ summary.paths | plural("attack path") }} ({{ summary.paths_exported }} at {{ analysis.min_level }} or above) starting from {{ summary.entry_points | plural("entry point") }}.
+  {% else %}
+  and found no attack paths{{ " from its " ~ (summary.entry_points | plural("entry point")) if summary.entry_points else "" }}.
+  {% endif %}
+  {% if summary.top_score is not none %}The highest path score is {{ summary.top_score }}.{% endif %}
+
+</p>
+
+<table class="kpis">
+  <tr>
+    <td><span class="kpi-n">{{ summary.resources }}</span><span class="kpi-l">Resources</span></td>
+    <td><span class="kpi-n">{{ summary.findings }}</span><span class="kpi-l">Findings</span></td>
+    <td><span class="kpi-n">{{ summary.paths }}</span><span class="kpi-l">Attack paths</span></td>
+    <td><span class="kpi-n">{{ summary.paths_exported }}</span><span class="kpi-l">At {{ analysis.min_level }} or above</span></td>
+    <td><span class="kpi-n">{{ summary.entry_points }}</span><span class="kpi-l">Entry points</span></td>
+    <td><span class="kpi-n">{{ summary.top_score if summary.top_score is not none else "-" }}</span><span class="kpi-l">Top score</span></td>
+  </tr>
+</table>
+
+<h3>Most significant paths</h3>
+{% if headline %}
+<table class="headline">
+  {% for item in headline %}
+  <tr>
+    <td class="headline-id">{{ item.source_id }}</td>
+    <td class="headline-text"><strong>{{ item.objective }}</strong> via {{ chain_text(item.hops) }}</td>
+    <td class="headline-level">{{ level(item.level) }}<span class="headline-score">score {{ item.score }}</span></td>
+  </tr>
+  {% endfor %}
+</table>
+{% elif summary.paths %}
+<p>
+  {{ summary.paths | plural("attack path") }} {{ "was" if summary.paths == 1 else "were" }} found, but none reached
+  {{ analysis.min_level }}. This report therefore covers findings only; no path detail is included.
+</p>
+{% else %}
+<p>
+  No attack path was found: no chain of findings connects an internet-facing
+  resource to a resource that qualifies for an attacker objective. This report
+  covers findings only. Findings still matter on their own and are listed with
+  fixes in section {{ numbers.remediation }}.
+</p>
+{% endif %}
+
+<h3>Highest-impact fixes</h3>
+{% if impact and impact.effective %}
+<p class="small muted">{{ impact_label }} Candidates: the {{ impact.candidate_count | plural("finding") }} on {{ impact.scope }}.</p>
+<table class="headline">
+  {% for row in impact.effective[:3] %}
+  <tr>
+    <td class="headline-id">{{ sev(row.severity) }}</td>
+    <td class="headline-text"><strong>{{ row.name }}</strong> on <span class="id">{{ row.resource | soft_id }}</span>:
+      {{ row.removed }} of {{ row.baseline }} selected paths no longer at or above {{ analysis.min_level }}{% if row.added %}, {{ row.added }} newly selected{% endif %}.</td>
+    <td class="headline-level"><span class="headline-score">{{ row.removed_ids | join(", ") }}</span></td>
+  </tr>
+  {% endfor %}
+</table>
+<p class="small muted">Suppression removes the finding from the model and re-runs the search. It is not a repair: changing the template may not have exactly this effect.</p>
+{% elif impact %}
+<p>
+  Suppressing any single one of the {{ impact.candidate_count | plural("finding") }} on {{ impact.scope }}
+  leaves every selected path at or above {{ analysis.min_level }}. These paths are held up by several
+  findings at once, so fixes need to be combined; section {{ numbers.remediation }} lists them.
+</p>
+{% elif scope.selected %}
+<p><strong>{{ impact_absent }}.</strong> Fix impact had not been computed for this scope
+  ({{ scope.label | lower }}) when the report was generated. Remediation guidance for every finding is still given
+  in section {{ numbers.remediation }}.</p>
+{% else %}
+<p>With no selected paths there is no path-removal estimate to make. Remediation guidance for every finding is in section {{ numbers.remediation }}.</p>
+{% endif %}
+
+{% if warnings %}
+<div class="callout">
+  <p class="callout-title">Limits of this run</p>
+  <ul>
+    {% for warning in warnings %}<li>{{ warning.message }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+</section>
+
+{# ======================================================================= #}
+{# 3. Scope, method and assumptions                                         #}
+{# ======================================================================= #}
+<section class="section" id="method">
+<h2><span class="h2-num">{{ numbers.method }}</span> <span class="h2-title">Scope, method and assumptions</span></h2>
+
+<h3>Scope</h3>
+<p>
+  One CloudFormation template, <span class="id">{{ analysis.template | soft_id }}</span>
+  (SHA-256 <span class="mono small">{{ analysis.sha256 }}</span>){% if nested and nested.merged %}
+  and the nested stacks it references{% endif %}, with {{ summary.resources | plural("resource") }}. Industry context for the
+  scenario records: {{ analysis.industry }}.
+</p>
+{% if nested %}
+<p>Nested stacks merged into this analysis:</p>
+<table class="data compact">
+  <thead><tr><th>Stack</th><th>Template</th><th class="r">Resources</th></tr></thead>
+  <tbody>
+  {% for item in nested.merged %}
+  <tr><td class="id">{{ item.stack | breakable }}</td><td class="mono">{{ item.template | breakable }}</td><td class="r num">{{ item.resources }}</td></tr>
+  {% endfor %}
+  {% for item in nested.skipped %}
+  <tr><td class="id">{{ item.stack | breakable }}</td><td colspan="2" class="muted">Not analysed: {{ item.reason }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<div class="callout assumptions">
+  <p class="callout-title">Assumptions and limits</p>
+  <ul>
+    <li>The template is analysed as written. No live AWS account, deployed state, drift or runtime configuration is examined.</li>
+    <li>IAM permissions are read only from policies present in the template. Permissions granted elsewhere are not seen.</li>
+    <li>Finding severity comes from the kind of weakness: privilege is critical; network control, exposure, identity and trust are high; impact is medium; capability and connection are low. Privilege-escalation methods carry their own catalogued severity.</li>
+    <li>Score thresholds are not calibrated against real incidents. They are fitted to the current rule set, and the findings total grows with how many rules cover a resource type. Compare scores within this report, not across tools.</li>
+    <li>Fix impact estimates suppress one finding at a time and re-run the search. Suppression is not repair, and only findings on the selected paths in scope are tried.</li>
+    <li>Scenario narratives, where present, are generated by a fine-tuned language model. They are illustrations, not verified findings, and may be wrong. {% if scenario_count %}{{ scenario_count | plural("path") }} in this report {{ "has" if scenario_count == 1 else "have" }} one.{% else %}None of the paths in this report has one.{% endif %} Downloading this report never generates new ones.</li>
+  </ul>
+</div>
+
+<h3>Method</h3>
+<ol class="stages">
+  <li><strong>Parse and normalise.</strong> The template is parsed into a resource model with typed attributes and dependencies. Nested-stack URLs in an uploaded template are never fetched.</li>
+  <li><strong>Evaluate rules.</strong> Security rules (AWS Config managed-rule equivalents and custom checks) and known IAM privilege-escalation methods are evaluated against every resource. Each match is a finding.</li>
+  <li><strong>Build the state graph.</strong> Resources become nodes carrying their findings, template dependencies become edges, and resources reachable from the internet are marked as entry points.</li>
+  <li><strong>Search attack paths.</strong> From each entry point a bounded search of at most {{ scoring.max_depth }} hops applies attacker-state transitions. A step is taken only when its preconditions hold, and a path ends at a resource that qualifies for an attacker objective.</li>
+  <li><strong>Score and select.</strong> Each path is scored and banded. Paths at {{ analysis.min_level }} or above are selected; this report details {{ scope.label | lower }}.</li>
+</ol>
+
+<div class="keep-together">
+<h3>How a path is scored</h3>
+<p class="formula">score = (findings total + objective weight) &times; length factor &times; entry boost</p>
+<table class="data legend-table">
+  <tbody>
+    <tr>
+      <th>Findings total</th>
+      <td>Sum of weights of each distinct finding on the path's resources:
+        {% for item in scoring.weights %}{{ item.severity }} {{ item.weight }}{% if not loop.last %}, {% endif %}{% endfor %}.</td>
+    </tr>
+    <tr>
+      <th>Objective weight</th>
+      <td>{% for item in scoring.objectives %}{{ item.name }} {{ item.weight }}{% if not loop.last %}, {% endif %}{% endfor %}.</td>
+    </tr>
+    <tr>
+      <th>Length factor</th>
+      <td>{{ scoring.damping }}<sup>hops &minus; 1</sup>: longer paths count for less.</td>
+    </tr>
+    <tr>
+      <th>Entry boost</th>
+      <td>&times;{{ scoring.boost }} when the entry resource is reachable from the internet, otherwise &times;1.</td>
+    </tr>
+    <tr>
+      <th>Levels</th>
+      <td>{{ level("CRITICAL") }} at {{ scoring.critical }} or more, {{ level("HIGH") }} at {{ scoring.high }} or more, {{ level("MEDIUM") }} below that.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+{% if risk_model %}
+<div class="keep-together">
+<h3>Contextual risk, a second opinion</h3>
+<p>
+  A separate model also scores each path{% if paths %}, shown under its score in
+  section {{ numbers.paths }}{% endif %}. It changes no score, level, rank or selection
+  above. Its weights are provisional and not calibrated, so read it as a prompt
+  for review, not a measurement.
+</p>
+<p class="formula">contextual risk = 100 &times; (impact/100)<sup>{{ risk_model.impact_exponent }}</sup> &times; (exposure/100)<sup>{{ risk_model.exposure_exponent }}</sup> &times; (path ease/100)<sup>{{ risk_model.ease_exponent }}</sup></p>
+<table class="data legend-table">
+  <tbody>
+    <tr>
+      <th>Impact</th>
+      <td>From the target's tags: criticality high {{ risk_model.base_high }}, medium {{ risk_model.base_medium }}, low {{ risk_model.base_low }}, untagged {{ risk_model.base_unknown }}; +{{ risk_model.sensitive_bonus }} for sensitive data and +{{ risk_model.production_bonus }} for production. Up to +{{ risk_model.blast_bonus }} for how many resources the target reaches.</td>
+    </tr>
+    <tr>
+      <th>Exposure</th>
+      <td>{{ risk_model.direct }} when the target is itself an entry point, {{ risk_model.via_path }} when it is reached through other resources, {{ risk_model.post_compromise }} after a foothold.</td>
+    </tr>
+    <tr>
+      <th>Path ease</th>
+      <td>100 &times; e<sup>&minus;{{ risk_model.decay }} &times; (hops &minus; 1)</sup>: shorter paths are easier.</td>
+    </tr>
+    <tr>
+      <th>Rank</th>
+      <td>By contextual risk, highest first. Equal scores share a rank.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+
+</section>
+
+{# ======================================================================= #}
+{# 4. Resource inventory                                                    #}
+{# ======================================================================= #}
+<section class="section" id="inventory">
+<h2><span class="h2-num">{{ numbers.inventory }}</span> <span class="h2-title">Resource inventory</span></h2>
+
+<h3>Resources by type</h3>
+<table class="data by-type">
+  <colgroup><col style="width: 34%"><col style="width: 52%"><col style="width: 14%"></colgroup>
+  <thead><tr><th>Resource type</th><th>CloudFormation type</th><th class="r">Count</th></tr></thead>
+  <tbody>
+  {% for row in inventory.by_type %}
+  <tr><td class="type-label">{{ row.label }}</td><td class="mono muted">{{ row.type | breakable }}</td><td class="r num">{{ row.count }}</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot><tr><td colspan="2">Total</td><td class="r num">{{ summary.resources }}</td></tr></tfoot>
+</table>
+
+<h3>Entry points</h3>
+{% if inventory.entry_points %}
+<p class="small muted">Resources reachable from outside the account, where an attacker could start. The reason is the finding that makes each one reachable.</p>
+<table class="data">
+  <colgroup><col style="width: 30%"><col style="width: 22%"><col style="width: 48%"></colgroup>
+  <thead><tr><th>Resource</th><th>Type</th><th>Reachable because</th></tr></thead>
+  <tbody>
+  {% for row in inventory.entry_points %}
+  <tr>
+    <td class="id">{{ row.id | breakable }}</td>
+    <td>{{ row.type | breakable }}</td>
+    <td>{% for reason in row.reasons %}{{ reason }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No resource in this template is reachable from the internet, so no attack path can start.</p>
+{% endif %}
+</section>
+
+{# ======================================================================= #}
+{# 5. Prioritised remediation                                               #}
+{# ======================================================================= #}
+<section class="section" id="remediation">
+<h2><span class="h2-num">{{ numbers.remediation }}</span> <span class="h2-title">Prioritised remediation</span></h2>
+
+{% if impact %}
+<p>
+  Each finding on {{ impact.scope }} was suppressed in turn and the path search re-run
+  (computed {{ impact.computed }}). <em>Removed</em> counts the
+  {{ impact_label | lower | replace(".", "") }}; a removed path may still exist below the threshold.
+  <em>Added</em> counts paths that newly reach it. Suppression models removing the evidence, not a
+  verified repair: changing the template may not have exactly this effect.
+</p>
+<table class="data remediation">
+  <colgroup>
+    <col style="width: 6%"><col style="width: 42%"><col style="width: 26%">
+    <col style="width: 15%"><col style="width: 11%">
+  </colgroup>
+  <thead>
+    <tr><th class="r">#</th><th>Finding and fix</th><th>Resource</th><th class="r">Removed</th><th class="r">Added</th></tr>
+  </thead>
+  {% for row in prioritised %}
+  <tbody class="item">
+  <tr class="item-head">
+    <td class="r num muted">{{ loop.index }}</td>
+    <td>{{ sev(row.severity) }} <span class="item-title">{{ row.name }}</span></td>
+    <td class="id">{{ row.resource | breakable }}</td>
+    <td class="r num"><span class="{{ 'strong' if row.removed else 'muted' }}">{{ row.removed }}</span><span class="muted"> of {{ row.baseline }}</span>
+      {% if row.removed_ids %}<span class="ids">{{ row.removed_ids | join(", ") }}</span>{% endif %}</td>
+    <td class="r num {{ 'muted' if not row.added }}">{{ row.added }}</td>
+  </tr>
+  <tr class="item-body">
+    <td></td>
+    <td colspan="4">{{ remediation_body(row.remediation) }}</td>
+  </tr>
+  </tbody>
+  {% endfor %}
+</table>
+{% if guidance %}<h3 class="break-before">Other findings</h3>
+<p class="small muted keep-with-next">Findings outside the candidate scope, with no impact numbers. Grouped by severity, then by check; one fix covers every resource listed.</p>{% endif %}
+{% else %}
+<p class="notice"><strong>{{ impact_absent }}.</strong>
+  {% if scope.selected %}Fix impact had not been computed for this scope ({{ scope.label | lower }}) when the report was generated,
+  so findings are ordered by severity and then by how many selected paths they sit on.{% else %}There are no selected paths, so findings are ordered by severity.{% endif %}
+  The guidance itself is complete.</p>
+<h3>Remediation guidance</h3>
+{% endif %}
+
+{% for group in guidance %}
+<div class="guidance-group">
+  <p class="group-title">{{ sev(group.severity) }} <span class="group-count">{{ group.checks | length | plural("check") }}</span></p>
+  {% for check in group.checks %}
+  <div class="check">
+    <p class="check-title">{{ check.name }}</p>
+    <p class="check-resources">
+      {% for resource in check.resources %}<span class="chip id">{{ resource | breakable }}</span>{% endfor %}
+      {% if check.selected_paths %}<span class="small muted">on {{ check.selected_paths | plural("selected path") }}</span>{% endif %}
+    </p>
+    {{ remediation_body(check.remediation) }}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+</section>
+
+{# ======================================================================= #}
+{# 6. Attack paths                                                          #}
+{# ======================================================================= #}
+{% if paths %}
+<section class="section" id="paths">
+<h2><span class="h2-num">{{ numbers.paths }}</span> <span class="h2-title">Attack paths</span></h2>
+
+<p>
+  {{ scope.label }}, highest score first. Each box is a resource, filled by the
+  most severe finding it carries; the dashed box is where the attacker starts.
+  Steps list what each move requires, what it grants, and the evidence in the
+  template that makes it possible.
+</p>
+{% if scope.cap_note %}<p><strong>{{ scope.cap_note }}</strong></p>{% endif %}
+<p class="key">
+  {% for key in severities if key != "unknown" %}<span class="swatch sev-{{ key }}"></span>{{ key }}{% if not loop.last %}<span class="key-gap"></span>{% endif %}{% endfor %}
+  <span class="key-gap"></span><span class="swatch sev-clean"></span>no findings
+  <span class="key-gap"></span><span class="swatch entry-swatch"></span>entry point
+</p>
+
+{% for path in paths %}
+<article class="path" id="{{ path.source_id }}">
+  <div class="path-head">
+    <h3 class="path-title">
+      <span class="path-id">{{ path.source_id }}</span>
+      {{ level(path.level) }}
+      <span class="path-objective">{{ path.objective }}</span>
+      <span class="path-score"><span class="muted">score</span> {{ path.score }}</span>
+    </h3>
+    <p class="path-meta">
+      Rank {{ path.rank }} <span class="dot">&middot;</span>
+      {{ path.length | plural("hop") }} <span class="dot">&middot;</span>
+      {{ path.findings | plural("finding") }} on the route <span class="dot">&middot;</span>
+      {{ "Entry reachable from the internet" if path.public_entry else "Entry not directly internet-facing" }}
+      {% if path.same_route %}<span class="dot">&middot;</span> Same route as {{ path.same_route | join(", ") }}, other objective{{ "s" if path.same_route | length > 1 }}{% endif %}
+    </p>
+    {% include "_chain.html.j2" %}
+    <p class="breakdown">
+      <span class="muted">Score</span> {{ path.breakdown.score }} =
+      (findings {{ path.breakdown.severity_total }} + objective {{ path.breakdown.objective_weight }})
+      &times; length {{ path.breakdown.length_factor }} <span class="muted">({{ path.breakdown.hops | plural("hop") }})</span>
+      &times; entry {{ path.breakdown.boost }}
+      <span class="muted">&middot; {{ path.level }} at {{ path.breakdown.threshold_critical if path.level == "CRITICAL" else path.breakdown.threshold_high }}{{ " or more" if path.level != "MEDIUM" else "" }}</span>
+    </p>
+    {% if path.risk %}
+    <p class="breakdown">
+      <span class="muted">Contextual risk</span> {{ path.risk.score }}
+      <span class="muted">(rank {{ path.risk.rank }} of {{ path.risk.ranks }})</span> from
+      impact {{ path.risk.impact }}, exposure {{ path.risk.exposure }} <span class="muted">({{ path.risk.reachability }})</span>,
+      path ease {{ path.risk.path_ease }}
+      <span class="muted">&middot; {{ path.risk.tags }}</span>
+    </p>
+    {% endif %}
+    {% if path.objective_techniques %}
+    <p class="objective-techniques">
+      <span class="muted">Objective techniques</span>
+      {% for technique in path.objective_techniques %}<span class="technique"><span class="mono">{{ technique.id }}</span> {{ technique.name }}</span>{% if not loop.last %}<span class="dot">&middot;</span>{% endif %}{% endfor %}
+    </p>
+    {% endif %}
+  </div>
+
+  {% include "_steps.html.j2" %}
+
+  {% if path.scenario %}
+  {% set scenario = path.scenario %}
+  <div class="scenario">
+    <p class="scenario-head"><span class="tag">AI-generated</span> Scenario narrative</p>
+    <p class="scenario-caveat">Written by a fine-tuned language model from this path's record. It illustrates how the path could be used; it is not verified and may contain errors.</p>
+    {% if scenario.preamble %}
+    <p class="scenario-label">Text before the first section</p>
+    <div class="scenario-text">{{ scenario.preamble }}</div>
+    {% endif %}
+    {% for section in scenario.sections %}
+    <p class="scenario-label">{{ section.title }}</p>
+    {% if section.text %}
+    <div class="scenario-text{{ ' mono-text' if not loop.first }}">{{ section.text }}</div>
+    {% else %}
+    <p class="scenario-missing">{{ section.note }}</p>
+    {% endif %}
+    {% endfor %}
+    <p class="provenance">Scenario: {{ scenario.source }}, {{ scenario.generated }}; model {{ scenario.model }}; adapter {{ scenario.adapter }}; recipe {{ scenario.recipe }}; prompt {{ scenario.prompt_version }}; {{ scenario.tokens }} tokens, finished by {{ scenario.finish_reason }}.</p>
+  </div>
+  {% endif %}
+
+  <p class="provenance">Derived from {{ analysis.template }} (SHA-256 {{ analysis.sha256[:12] }}) by analyser {{ analysis.commit }}; path {{ path.rank }} of {{ summary.paths }} ranked.</p>
+</article>
+{% endfor %}
+</section>
+{% endif %}
+
+{# ======================================================================= #}
+{# 7. All findings                                                          #}
+{# ======================================================================= #}
+<section class="section" id="findings">
+<h2><span class="h2-num">{{ numbers.findings }}</span> <span class="h2-title">All findings</span></h2>
+
+<p>{{ summary.findings | plural("finding") }}, grouped by severity. <em>Paths</em> counts every ranked path that crosses the finding, selected or not.</p>
+
+{% for group in findings %}
+<h3 class="severity-heading">{{ sev(group.severity) }} <span class="group-count">{{ group.rows | length | plural("finding") }}</span></h3>
+<table class="data findings">
+  <colgroup><col style="width: 22%"><col style="width: 49%"><col style="width: 8%"><col style="width: 21%"></colgroup>
+  <thead><tr><th>Resource</th><th>Finding</th><th class="r">Paths</th><th>Reference</th></tr></thead>
+  <tbody>
+  {% for row in group.rows %}
+  <tr>
+    <td><span class="id">{{ row.resource | breakable }}</span><span class="sub">{{ row.resource_type }}</span></td>
+    <td><span class="cell-title">{{ row.name }}</span><span class="sub">{{ row.summary }}</span></td>
+    <td class="r num {{ 'muted' if not row.paths }}">{{ row.paths }}</td>
+    <td>
+      {% for reference in row.references %}
+      <a class="ref" href="{{ reference.url }}"><span class="ref-source">{{ reference.source }}</span><span class="ref-id">{{ reference.id | breakable }}</span></a>
+      {% else %}
+      {% if row.remediation %}<a class="ref" href="{{ row.remediation.url }}"><span class="ref-source">Remediation guide</span></a>{% else %}<span class="muted">None catalogued</span>{% endif %}
+      {% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+{% if not findings %}
+<p>No findings. Every rule passed for every resource in this template.</p>
+{% endif %}
+</section>
+
+</body>
+</html>

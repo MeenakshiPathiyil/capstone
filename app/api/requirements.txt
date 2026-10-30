@@ -1,0 +1,30 @@
+# The app's runtime: the analysis pipeline's own requirements, plus the API.
+# Exact versions, resolved on Python 3.12 after a green install and test run.
+-r ../../requirements.txt
+PyYAML==6.0.3
+fastapi==0.162.0
+uvicorn==0.54.0
+pydantic-settings==2.16.1
+python-multipart==0.0.32
+jinja2==3.1.6
+
+# The PDF report (app/api/report/). Needs Pango from the system: Homebrew
+# `pango` on macOS (found automatically, see app/api/report/pdf.py), or
+# libpango-1.0-0, libpangoft2-1.0-0 and libharfbuzz-subset0 on Debian/Ubuntu
+# (as the CI api job installs). Without them the API still runs and
+# GET .../report.pdf returns 503.
+weasyprint==70.0
+
+# Live scenario generation (app/api/space_client.py): the model Space's
+# runtime and quota through huggingface_hub, /generate through gradio_client.
+# Imported only when live generation is configured. space_client.py sets
+# timeouts on both libraries' HTTP clients, so those are pinned too.
+gradio_client==2.7.2
+huggingface_hub==2.3.0
+httpx==0.28.1
+httpx2==2.16.0
+
+# Not imported directly, but their versions decide the generated OpenAPI
+# snapshot byte for byte, so they are pinned with the rest.
+pydantic==2.14.1
+starlette==1.9.0

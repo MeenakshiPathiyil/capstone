@@ -1,0 +1,7 @@
+Resources:
+  Fn::Transform:
+    Name: AWS::Include
+    Parameters:
+      Location: s3://bucket/snippet.yaml
+  B:
+    Type: AWS::S3::Bucket

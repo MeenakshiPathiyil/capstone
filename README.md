@@ -28,12 +28,15 @@ CloudFormation YAML ─▶ parser/ ─▶ data/normalized_resources.json
 
 ## Running it
 
-Stages 0 to 3 need Python 3.9+ and PyYAML:
+Stages 0 to 3 need Python 3.9+ and PyYAML. Use a virtual environment: on
+Homebrew and Debian Python a bare `pip3 install` fails with
+`externally-managed-environment`.
 
 ```bash
-pip3 install -r requirements.txt
-python3 -m parser.infra_parser     # sample_yamls/cloudformation5.yml -> data/normalized_resources.json
-python3 -m runner.graph_runner     # findings, graphs and ranked paths -> output/
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m parser.infra_parser     # sample_yamls/cloudformation5.yml -> data/normalized_resources.json
+.venv/bin/python -m runner.graph_runner     # findings, graphs and ranked paths -> output/
 ```
 
 ```
@@ -43,10 +46,16 @@ Done. 15 resources, 16 edges, 22 security findings, 22 attack paths.
 Stage 4 needs a GPU (Colab or Kaggle) or an Apple Silicon Mac; see
 [`scenario_generation/README.md`](scenario_generation/README.md).
 
+## Run the app
+
+A local web app (React and FastAPI) wraps this pipeline: upload a template,
+browse findings and attack paths, and download a PDF report. Setup and run
+instructions are in [`app/README.md`](app/README.md).
+
 ## Tests
 
 ```bash
-python3 -m pytest -q
+.venv/bin/python -m pytest -q
 ```
 
 Runs both halves (`tests/` and `scenario_generation/tests/`) with nothing but

@@ -1,0 +1,830 @@
+/* The assessment PDF. A4, 18 mm margins, Inter and Geist Mono (OFL, see fonts/).
+ *
+ * Colour carries meaning only: severity fills come from
+ * attack_path/renderer.py SEVERITY_STYLES through the .sev-<key> classes the
+ * template defines (--fill, --stroke). Everything else is greyscale.
+ */
+
+@font-face { font-family: "Inter"; font-weight: 400; src: url("fonts/Inter-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; src: url("fonts/Inter-Medium.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 600; src: url("fonts/Inter-SemiBold.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 700; src: url("fonts/Inter-Bold.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 400; src: url("fonts/GeistMono-Regular.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-weight: 500; src: url("fonts/GeistMono-Medium.woff2") format("woff2"); }
+
+:root {
+  --ink: #111827;
+  --ink-2: #374151;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --rule: #e5e7eb;
+  --rule-strong: #d1d5db;
+  --wash: #f9fafb;
+  --wash-2: #f3f4f6;
+  --link: #1f3a8a;
+}
+
+/* -- Page ------------------------------------------------------------------ */
+
+@page {
+  size: A4;
+  margin: 18mm 18mm 20mm 18mm;
+
+  @top-left {
+    content: string(section);
+    font-family: "Inter";
+    font-size: 7pt;
+    color: #9ca3af;
+    vertical-align: bottom;
+    padding-bottom: 5mm;
+  }
+
+  @top-right {
+    content: "Attack Path Assessment";
+    font-family: "Inter";
+    font-size: 7pt;
+    color: #9ca3af;
+    vertical-align: bottom;
+    padding-bottom: 5mm;
+  }
+
+  @bottom-center {
+    content: "Template " string(template) "  \00B7  " string(date)
+             "  \00B7  page " counter(page) " of " counter(pages)
+             "  \00B7  analyser " string(commit);
+    font-family: "Inter";
+    font-size: 7pt;
+    color: #6b7280;
+    font-variant-numeric: tabular-nums;
+    vertical-align: top;
+    padding-top: 6mm;
+  }
+}
+
+@page :first {
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-center { content: none; }
+}
+
+/* Strings for the running header and footer, taken from the cover. */
+.footer-template { string-set: template attr(data-short); }
+.footer-date { string-set: date content(text); }
+.footer-commit { string-set: commit content(text); }
+.h2-title { string-set: section content(text); }
+
+/* -- Base ------------------------------------------------------------------ */
+
+html {
+  font-family: "Inter", sans-serif;
+  font-size: 9pt;
+  line-height: 1.5;
+  color: var(--ink);
+  font-feature-settings: "cv11", "ss03";
+}
+
+body { margin: 0; }
+
+p { margin: 0 0 2.6mm 0; orphans: 3; widows: 3; }
+
+a { color: var(--link); text-decoration: none; }
+
+strong, .strong { font-weight: 600; }
+
+em { font-style: normal; font-weight: 500; }
+
+sup { font-size: 0.7em; line-height: 0; }
+
+.mono, pre, .fact, .chip, .ids, .hash {
+  font-family: "Geist Mono", monospace;
+  font-feature-settings: normal;
+}
+
+.mono { font-size: 0.92em; }
+
+.muted { color: var(--muted); }
+
+.small { font-size: 8pt; }
+
+.num, .r, td.num, .legend-n, .kpi-n, .figure-n {
+  font-variant-numeric: tabular-nums;
+}
+
+.r { text-align: right; }
+
+.dot { color: var(--faint); padding: 0 0.6mm; }
+
+/* Resource ids, hashes and generated values can be very long. Running text
+ * breaks only where nothing else fits (ids carry <wbr> hints at word
+ * boundaries); chips and hashes may break anywhere. */
+td, .provenance { overflow-wrap: break-word; }
+
+/* Ids carry <wbr> hints (pdf.breakable); WeasyPrint only honours them under
+ * overflow-wrap: normal. */
+.id, .box-id, .ref-id, .move { overflow-wrap: normal; }
+
+.hash, .fact, .chip, .ids { overflow-wrap: anywhere; }
+
+.id { font-weight: 500; }
+
+/* -- Headings -------------------------------------------------------------- */
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+.section { break-before: page; }
+
+h2 {
+  font-size: 17pt;
+  line-height: 1.2;
+  margin-bottom: 6mm;
+  padding-bottom: 3mm;
+  border-bottom: 0.75pt solid var(--ink);
+  break-after: avoid;
+  bookmark-level: 1;
+}
+
+.h2-num {
+  display: inline-block;
+  font-size: 10pt;
+  font-weight: 500;
+  color: var(--muted);
+  width: 9mm;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 2pt;
+}
+
+h3 {
+  font-size: 10.5pt;
+  margin: 6mm 0 2.2mm 0;
+  break-after: avoid;
+  bookmark-level: 2;
+}
+
+h2 + h3, h2 + p + h3 { margin-top: 0; }
+
+h3.break-before { margin-top: 9mm; }
+
+.keep-together { break-inside: avoid; }
+
+/* An intro paragraph stays with what it introduces. */
+.keep-with-next { break-after: avoid; }
+
+/* -- Badges, chips, swatches ------------------------------------------------ */
+
+.badge {
+  display: inline-block;
+  font-size: 6.5pt;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.9mm 1.5mm 0.8mm 1.5mm;
+  border-radius: 2pt;
+  background: var(--fill);
+  color: var(--stroke);
+  border: 0.5pt solid var(--stroke);
+  vertical-align: 1pt;
+  white-space: nowrap;
+}
+
+.badge.level { letter-spacing: 0.06em; }
+
+.tag {
+  display: inline-block;
+  font-size: 6.5pt;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.7mm 1.4mm;
+  border-radius: 2pt;
+  border: 0.5pt solid var(--ink-2);
+  color: var(--ink-2);
+  line-height: 1;
+}
+
+.tag.subtle { border-color: var(--rule-strong); color: var(--muted); margin-top: 1mm; }
+
+.chip, .fact {
+  display: inline-block;
+  font-size: 7pt;
+  line-height: 1.35;
+  padding: 0.25mm 1.1mm;
+  margin: 0 0.8mm 0.8mm 0;
+  border-radius: 1.5pt;
+  background: var(--wash-2);
+  color: var(--ink);
+}
+
+.chip.id { font-weight: 400; }
+
+.fact.grant { background: #ffffff; border: 0.5pt solid var(--rule-strong); }
+
+.swatch {
+  display: inline-block;
+  width: 2.6mm;
+  height: 2.6mm;
+  border-radius: 0.6mm;
+  background: var(--fill);
+  border: 0.5pt solid var(--stroke);
+  margin-right: 1.4mm;
+  vertical-align: -0.35mm;
+}
+
+.entry-swatch {
+  background: #ffffff;
+  border: 0.8pt dashed var(--ink-2);
+}
+
+/* -- Cover ----------------------------------------------------------------- */
+
+.cover { padding-top: 6mm; }
+
+.eyebrow {
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 5mm;
+}
+
+.cover-title {
+  font-size: 32pt;
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin-bottom: 3mm;
+  bookmark-level: none;
+}
+
+.cover-template {
+  font-size: 14pt;
+  font-weight: 500;
+  color: var(--ink-2);
+  margin-bottom: 7mm;
+  overflow-wrap: anywhere;
+}
+
+.cover-lede {
+  font-size: 10.5pt;
+  line-height: 1.5;
+  color: var(--ink-2);
+  width: 128mm;
+  margin-bottom: 8mm;
+}
+
+.cover-counts {
+  font-size: 10pt;
+  padding: 3.2mm 0;
+  border-top: 0.75pt solid var(--ink);
+  border-bottom: 0.5pt solid var(--rule);
+  margin-bottom: 7mm;
+}
+
+.cover-counts .sep { color: var(--faint); padding: 0 2.2mm; }
+
+.strips { margin-bottom: 8mm; }
+
+.strip { margin-bottom: 5mm; }
+
+.strip-title {
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.6mm;
+}
+
+.bar-track {
+  display: flex;
+  height: 3mm;
+  background: var(--wash-2);
+  border-radius: 0.8mm;
+  overflow: hidden;
+  margin-bottom: 1.8mm;
+}
+
+.bar {
+  height: 3mm;
+  background: var(--fill);
+  border-right: 0.75pt solid #ffffff;
+}
+
+.bar:last-child { border-right: none; }
+
+table.legend { border-collapse: collapse; }
+
+table.legend td {
+  padding: 0 6mm 0 0;
+  font-size: 8pt;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+table.legend td.zero { color: var(--faint); }
+
+table.legend td.zero .swatch { background: #ffffff; border-color: var(--rule-strong); }
+
+.legend-n { font-weight: 600; color: var(--ink); margin-right: 0.6mm; }
+
+table.legend td.zero .legend-n { color: var(--faint); }
+
+table.meta {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8mm;
+}
+
+table.meta th, table.meta td {
+  text-align: left;
+  vertical-align: top;
+  padding: 1.25mm 0;
+  border-bottom: 0.5pt solid var(--rule);
+  font-size: 8.5pt;
+}
+
+table.meta th {
+  width: 38mm;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+table.meta td.mono { font-size: 7.8pt; }
+
+.contents { margin-bottom: 6mm; }
+
+.contents-title {
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.5mm;
+}
+
+table.toc { width: 100%; border-collapse: collapse; }
+
+table.toc td { padding: 1.1mm 0; border-bottom: 0.5pt solid var(--rule); font-size: 8.5pt; }
+
+table.toc a { color: var(--ink); }
+
+td.toc-n { width: 6mm; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+td.toc-page { width: 8mm; text-align: right; }
+
+table.toc td.toc-spacer { width: 10mm; border-bottom: none; }
+
+a.page-ref::after {
+  content: target-counter(attr(href), page);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cover-note {
+  font-size: 8pt;
+  color: var(--muted);
+  border-left: 1.5pt solid var(--rule-strong);
+  padding-left: 3mm;
+  width: 128mm;
+}
+
+/* -- Body text blocks ------------------------------------------------------ */
+
+.lede { font-size: 10pt; line-height: 1.55; color: var(--ink-2); margin-bottom: 5mm; }
+
+.notice {
+  padding: 2.6mm 3.2mm;
+  background: var(--wash);
+  border-left: 1.5pt solid var(--ink-2);
+}
+
+.callout {
+  margin-top: 4mm;
+  padding: 3.5mm 4mm 1.5mm 4mm;
+  background: var(--wash);
+  border: 0.5pt solid var(--rule);
+  border-radius: 1.5mm;
+  break-inside: avoid;
+}
+
+.callout-title {
+  font-size: 7.5pt;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: 2mm;
+}
+
+.callout ul { margin: 0 0 2mm 0; padding-left: 4mm; }
+
+.callout li { margin-bottom: 1.1mm; }
+
+.assumptions { font-size: 8.4pt; line-height: 1.45; }
+
+ol.stages { margin: 0 0 2mm 0; padding-left: 5mm; }
+
+ol.stages { font-size: 8.6pt; }
+
+ol.stages li { margin-bottom: 1.1mm; padding-left: 1mm; }
+
+.formula {
+  font-family: "Geist Mono", monospace;
+  font-size: 8.5pt;
+  padding: 2.2mm 3mm;
+  background: var(--wash);
+  border-radius: 1mm;
+  margin-bottom: 3mm;
+}
+
+/* -- KPI row ----------------------------------------------------------------- */
+
+table.kpis {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  margin-bottom: 2mm;
+  border-top: 0.5pt solid var(--rule);
+  border-bottom: 0.5pt solid var(--rule);
+}
+
+table.kpis td {
+  padding: 3mm 2mm 3mm 0;
+  vertical-align: top;
+  border-right: 0.5pt solid var(--rule);
+  padding-left: 3mm;
+}
+
+table.kpis td:first-child { padding-left: 0; }
+
+table.kpis td:last-child { border-right: none; }
+
+.kpi-n { display: block; font-size: 17pt; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
+
+.kpi-l { display: block; font-size: 7.3pt; color: var(--muted); margin-top: 1mm; line-height: 1.25; }
+
+table.headline {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 2.5mm 0;
+  border-top: 0.5pt solid var(--rule);
+}
+
+table.headline tr { break-inside: avoid; }
+
+table.headline td {
+  padding: 2.2mm 0;
+  border-bottom: 0.5pt solid var(--rule);
+  vertical-align: top;
+}
+
+td.headline-id {
+  width: 19mm;
+  font-weight: 600;
+}
+
+td.headline-text { padding-right: 4mm; }
+
+td.headline-level {
+  width: 30mm;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.headline-score {
+  display: block;
+  margin-top: 1mm;
+  font-size: 7.8pt;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- Tables ------------------------------------------------------------------ */
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 8pt;
+  line-height: 1.4;
+  margin-bottom: 4mm;
+}
+
+table.data thead { display: table-header-group; }
+
+table.data tr { break-inside: avoid; }
+
+table.data th {
+  text-align: left;
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 1.6mm 2mm 1.6mm 0;
+  border-bottom: 0.75pt solid var(--ink-2);
+  vertical-align: bottom;
+}
+
+table.data th.r { text-align: right; }
+
+table.data td {
+  padding: 2mm 2mm 2mm 0;
+  border-bottom: 0.5pt solid var(--rule);
+  vertical-align: top;
+}
+
+table.data td.r, table.data th.r { padding-right: 3mm; }
+
+table.data td:last-child, table.data th:last-child { padding-right: 0; }
+
+table.data tfoot td {
+  font-weight: 600;
+  border-bottom: none;
+  border-top: 0.75pt solid var(--ink-2);
+}
+
+table.data.by-type td.mono { font-size: 7.4pt; }
+
+table.data.compact td { padding-top: 1.3mm; padding-bottom: 1.3mm; }
+
+table.legend-table th {
+  width: 30mm;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--ink);
+  border-bottom: 0.5pt solid var(--rule);
+  vertical-align: top;
+  padding: 1.5mm 2mm 1.5mm 0;
+}
+
+table.legend-table td { padding-top: 1.5mm; padding-bottom: 1.5mm; }
+
+.cell-title { display: block; font-weight: 600; margin-top: 0.4mm; }
+
+.badge + .cell-title { margin-top: 1.2mm; }
+
+.sub { display: block; color: var(--ink-2); margin-top: 0.6mm; }
+
+.type-label { font-weight: 500; }
+
+.ids { display: block; font-size: 6.6pt; color: var(--muted); margin-top: 0.6mm; }
+
+/* -- Remediation ------------------------------------------------------------- */
+
+.fix { margin: 0 0 1.4mm 0; }
+
+/* Prioritised remediation: one row group per finding, kept on one page. */
+table.remediation tbody.item { break-inside: avoid; }
+
+table.remediation tr.item-head td { border-bottom: none; padding-bottom: 0.6mm; }
+
+table.remediation tr.item-body td { padding-top: 0.6mm; padding-bottom: 3mm; }
+
+.item-title { font-weight: 600; }
+
+table.remediation .badge { margin-right: 1mm; }
+
+table.remediation .snippet { width: 120mm; }
+
+table.remediation .fix { width: 128mm; }
+
+pre.snippet {
+  font-size: 7pt;
+  line-height: 1.45;
+  margin: 0 0 1.4mm 0;
+  padding: 1.6mm 2.2mm;
+  background: var(--wash);
+  border: 0.5pt solid var(--rule);
+  border-radius: 1mm;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fix-link { font-size: 7pt; margin: 0; overflow-wrap: anywhere; }
+
+.guidance-group { margin-bottom: 4mm; }
+
+.group-title { margin: 4mm 0 1mm 0; break-after: avoid; }
+
+.group-count, .severity-heading .group-count {
+  font-size: 8pt;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 1.5mm;
+}
+
+.check {
+  padding: 2.4mm 0 2mm 0;
+  border-top: 0.5pt solid var(--rule);
+  break-inside: avoid;
+}
+
+.check-title { font-weight: 600; margin: 0 0 1mm 0; }
+
+.check-resources { margin: 0 0 1mm 0; }
+
+.check .fix { width: 150mm; }
+
+h3.severity-heading { margin-top: 6mm; }
+
+h3.severity-heading .badge { font-size: 7pt; }
+
+/* -- Attack paths ------------------------------------------------------------ */
+
+.key { font-size: 7.5pt; color: var(--ink-2); margin-bottom: 4mm; }
+
+.key-gap { display: inline-block; width: 4mm; }
+
+article.path {
+  margin-top: 8mm;
+  padding-top: 4mm;
+  border-top: 0.75pt solid var(--ink);
+}
+
+article.path:first-of-type { margin-top: 2mm; }
+
+/* A path is kept on one page whenever it fits; only a path taller than a
+ * page is split, and then between step rows. */
+article.path { break-inside: avoid; }
+
+/* Title, chain and score stay together; the steps table may start on the next page. */
+.path-head { break-inside: avoid; }
+
+.path-title {
+  display: flex;
+  align-items: baseline;
+  font-size: 12pt;
+  margin: 0 0 1.2mm 0;
+  bookmark-level: 2;
+  bookmark-label: content(text);
+}
+
+.path-id { font-weight: 700; margin-right: 2.5mm; }
+
+.path-title .badge { margin-right: 2.5mm; vertical-align: 2pt; }
+
+.path-objective { flex: 1; font-weight: 600; }
+
+.path-score {
+  font-size: 10pt;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.path-score .muted { font-weight: 400; font-size: 8pt; }
+
+.path-meta { font-size: 7.8pt; color: var(--muted); margin-bottom: 2.8mm; }
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin: 0 0 3mm 0;
+  break-inside: avoid;
+}
+
+.hop {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 2mm;
+}
+
+.arrow {
+  align-self: center;
+  width: 5mm;
+  text-align: center;
+  font-size: 6pt;
+  color: var(--ink-2);
+}
+
+.box {
+  box-sizing: border-box;
+  padding: 1.6mm 2mm 1.5mm 2mm;
+  background: var(--fill);
+  border: 0.75pt solid var(--stroke);
+  border-radius: 1.2mm;
+  line-height: 1.25;
+}
+
+.box.entry { border-style: dashed; border-width: 1.1pt; }
+
+.box-id {
+  display: block;
+  font-size: 7.4pt;
+  font-weight: 600;
+  color: #111827;
+}
+
+.box-type { display: block; font-size: 6.4pt; color: #111827; margin-top: 0.4mm; }
+
+.box-sev {
+  display: block;
+  font-size: 5.8pt;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--stroke);
+  margin-top: 0.8mm;
+}
+
+.breakdown {
+  font-size: 7.8pt;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 1.2mm;
+}
+
+.objective-techniques { font-size: 7.8pt; margin-bottom: 2mm; }
+
+.objective-techniques > .muted { margin-right: 1.5mm; }
+
+table.steps { margin-top: 1mm; font-size: 7.6pt; line-height: 1.36; }
+
+table.steps td { padding-top: 1.5mm; padding-bottom: 1.5mm; }
+
+table.steps .chip, table.steps .fact { font-size: 6.8pt; line-height: 1.3; margin-bottom: 0.6mm; }
+
+table.steps .ev-key { font-size: 6.8pt; }
+
+.move { display: block; margin-top: 0.6mm; color: var(--ink-2); }
+
+.tactic { display: block; font-weight: 500; }
+
+.facts { display: block; }
+
+.grants { display: flex; align-items: flex-start; margin-top: 0.4mm; }
+
+.grants-arrow { flex: none; width: 3.5mm; color: var(--muted); line-height: 1.6; }
+
+.grant-list { flex: 1; }
+
+.ev { display: block; margin-bottom: 0.4mm; }
+
+.ev-key { display: inline-block; color: var(--muted); font-size: 7pt; margin-right: 1.2mm; }
+
+.scenario {
+  box-decoration-break: clone;
+  margin: 3mm 0 2mm 0;
+  padding: 3.5mm 4mm 1mm 4mm;
+  border: 0.5pt solid var(--rule-strong);
+  border-left: 1.5pt solid var(--ink-2);
+  border-radius: 1mm;
+}
+
+.scenario-head { font-weight: 600; font-size: 9pt; margin-bottom: 1mm; break-after: avoid; }
+
+.scenario-head .tag { margin-right: 1.6mm; vertical-align: 1pt; }
+
+.scenario-caveat { font-size: 7.6pt; color: var(--muted); margin-bottom: 2.5mm; }
+
+.scenario-label {
+  font-size: 7pt;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 2.5mm 0 1mm 0;
+  break-after: avoid;
+}
+
+.scenario-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 8.2pt;
+  line-height: 1.5;
+  margin-bottom: 2mm;
+}
+
+.scenario-text.mono-text {
+  font-family: "Geist Mono", monospace;
+  font-size: 7.4pt;
+  line-height: 1.5;
+}
+
+.scenario-missing { font-size: 8pt; color: var(--ink-2); font-style: italic; }
+
+.provenance {
+  break-before: avoid;
+  font-size: 6.8pt;
+  color: var(--muted);
+  margin: 1.5mm 0 0 0;
+}
+
+/* -- All findings ----------------------------------------------------------- */
+
+table.findings .sub { color: var(--ink-2); }
+
+a.ref { display: block; margin-bottom: 1mm; }
+
+.ref-source { display: block; }
+
+.ref-id {
+  display: block;
+  font-family: "Geist Mono", monospace;
+  font-size: 6.8pt;
+  color: var(--ink-2);
+}

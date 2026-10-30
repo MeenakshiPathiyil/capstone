@@ -1,0 +1,9 @@
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      Tags:
+        Fn::Transform:
+          Name: MyMacro
+          Parameters:
+            Key: value

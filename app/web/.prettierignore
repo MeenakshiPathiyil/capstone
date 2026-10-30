@@ -1,0 +1,10 @@
+dist
+dist-e2e
+node_modules
+package-lock.json
+src/api/schema.d.ts
+src/assets/fonts
+test-results
+playwright-report
+# Deliberately malformed and non-template inputs for the e2e error flows
+e2e/fixtures

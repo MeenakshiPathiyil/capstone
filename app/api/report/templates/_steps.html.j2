@@ -1,0 +1,40 @@
+{#- The moves of one path. Rows never split across pages; the header repeats. -#}
+<table class="data steps">
+  <colgroup>
+    <col style="width: 4%"><col style="width: 25%"><col style="width: 18%">
+    <col style="width: 26%"><col style="width: 27%">
+  </colgroup>
+  <thead>
+    <tr><th class="r">#</th><th>Move</th><th>ATT&amp;CK</th><th>Requires &rarr; grants</th><th>Evidence in the template</th></tr>
+  </thead>
+  <tbody>
+  {% for step in path.steps %}
+  <tr>
+    <td class="r num muted">{{ step.n }}</td>
+    <td>
+      <span class="cell-title">{{ step.action }}</span>
+      <span class="move"><span class="id">{{ step.source | breakable }}</span> &rarr; <span class="id">{{ step.target | breakable }}</span></span>
+      {% if step.fallback %}<span class="tag subtle">generic transition</span>{% endif %}
+    </td>
+    <td>
+      {% if step.tactic %}<span class="tactic">{{ step.tactic | capitalize }}</span>{% endif %}
+      {% if step.technique %}<span class="sub"><span class="mono">{{ step.technique }}</span>{% if step.technique_name %} {{ step.technique_name }}{% endif %}</span>{% endif %}
+      {% if not step.tactic and not step.technique %}<span class="muted">Not mapped</span>{% endif %}
+    </td>
+    <td>
+      <span class="facts">{% for fact in step.requires %}<span class="fact">{{ fact | breakable }}</span>{% else %}<span class="muted">nothing</span>{% endfor %}</span>
+      {% if step.alternatives %}<span class="sub muted">or {% for option in step.alternatives %}{{ option | breakable }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      {% if step.permissions %}<span class="sub">Permissions: {% for permission in step.permissions %}<span class="mono">{{ permission }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      <span class="grants"><span class="grants-arrow">&rarr;</span><span class="grant-list">{% for fact in step.grants %}<span class="fact grant">{{ fact | breakable }}</span>{% else %}<span class="muted">nothing new</span>{% endfor %}</span></span>
+    </td>
+    <td>
+      {% for item in step.evidence %}
+      <span class="ev"><span class="ev-key">{{ item.key }}</span>{% for chip in item.chips %}<span class="chip">{{ chip | breakable }}</span>{% endfor %}</span>
+      {% else %}
+      <span class="muted">-</span>
+      {% endfor %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>

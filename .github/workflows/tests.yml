@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  pytest:
+  core:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -19,4 +19,126 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m pytest -q
+      # Explicit paths keep app/api/tests out of this job
+      - run: python -m pytest -q tests scenario_generation/tests
+
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            app/api/requirements.txt
+            app/api/requirements-test.txt
+      # WeasyPrint's system libraries (Pango and friends)
+      - run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
+      - run: pip install -r app/api/requirements.txt -r app/api/requirements-test.txt
+      - run: python -m pytest -q app/api/tests
+      # The committed snapshot must match what the app generates now
+      - run: python -m app.scripts.export_openapi --output /tmp/capstone-openapi.json
+      - run: diff app/api/tests/fixtures/openapi.json /tmp/capstone-openapi.json
+
+  # The Space's app.py needs gradio, which the api job leaves out (it is large and
+  # the API never imports it), so there its four tests skip. This job installs
+  # gradio at the Space's own sdk_version into an environment of its own, with
+  # only what test_model_space.py imports, and runs that file alone. It fails if
+  # any test in it is skipped.
+  space:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install gradio and the test's own dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/space-env"
+          gradio_version=$(sed -n 's/^sdk_version: *//p' app/model_space/README.md)
+          test -n "$gradio_version"
+          grep -hE '^(pytest|pydantic|pydantic-settings|PyYAML)==' \
+            app/api/requirements.txt app/api/requirements-test.txt \
+            | xargs "$RUNNER_TEMP/space-env/bin/pip" install "gradio==$gradio_version"
+      - name: Run the Space tests
+        run: |
+          "$RUNNER_TEMP/space-env/bin/python" -m pytest -q -rs app/api/tests/test_model_space.py | tee "$RUNNER_TEMP/space.txt"
+          ! grep -q skipped "$RUNNER_TEMP/space.txt"
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test -- --run
+      # Types come from the committed OpenAPI snapshot, so no API server is needed
+      - run: npm run types
+      - run: git diff --exit-code -- src/api/schema.d.ts
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    # Not required until the suite has been stable for a week
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Look for e2e specs
+        id: specs
+        run: |
+          if compgen -G 'app/web/e2e/*.spec.*' > /dev/null; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No spec files in app/web/e2e, skipping."
+          fi
+      - if: steps.specs.outputs.found == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            app/api/requirements.txt
+            app/api/requirements-test.txt
+      - if: steps.specs.outputs.found == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/web/package-lock.json
+      - if: steps.specs.outputs.found == 'true'
+        run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
+      - if: steps.specs.outputs.found == 'true'
+        run: pip install -r app/api/requirements.txt -r app/api/requirements-test.txt
+      - if: steps.specs.outputs.found == 'true'
+        working-directory: app/web
+        run: npm ci
+      - if: steps.specs.outputs.found == 'true'
+        working-directory: app/web
+        run: npx playwright install --with-deps chromium
+      # playwright.config.ts builds the web app into dist-e2e and starts one
+      # fake model server per scenario mode (ports 8040-8043) on this Python.
+      - if: steps.specs.outputs.found == 'true'
+        working-directory: app/web
+        run: npm run e2e
+        env:
+          E2E_PYTHON: python
+      - if: failure() && steps.specs.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright
+          path: |
+            app/web/playwright-report
+            app/web/test-results
+          if-no-files-found: ignore

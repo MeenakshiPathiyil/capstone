@@ -1,0 +1,294 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+/*
+ * Design tokens. Light theme only.
+ *
+ * Neutrals are Tailwind's zinc. Colour is reserved for meaning: severity and
+ * attack level. The severity pairs below are fallbacks with the same values as
+ * the backend's SEVERITY_STYLES (attack_path/renderer.py); /api/meta overwrites
+ * them on :root at load (lib/severity.ts, applySeverityPalette), and every
+ * derived tone (tint, solid, line) follows automatically through color-mix.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/Inter-Bold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/GeistMono-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/GeistMono-Medium.woff2') format('woff2');
+}
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Type scale. 14px body, 13px dense tables, 12px meta, 11px micro labels. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-dense: 0.8125rem;
+  --text-dense--line-height: 1.25rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-base--letter-spacing: -0.011em;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-lg--letter-spacing: -0.014em;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-xl--letter-spacing: -0.017em;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-2xl--letter-spacing: -0.019em;
+
+  /* Radii: 4 chips and badges, 6 controls, 8 surfaces and overlays. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+
+  /* A calm indeterminate bar: one short segment sweeping across. */
+  --animate-indeterminate: indeterminate 2.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  @keyframes indeterminate {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(400%);
+    }
+  }
+
+  /* The only shadow: overlays (popover, select, tooltip, dialog, sheet). */
+  --shadow-overlay:
+    0 0 0 1px rgb(24 24 27 / 0.06), 0 4px 8px -2px rgb(24 24 27 / 0.06),
+    0 16px 32px -8px rgb(24 24 27 / 0.12);
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--subtle);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--subtle);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
+  --color-accent: var(--subtle);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--sev-critical-stroke);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--border-strong);
+  --color-ring: var(--ring);
+
+  /* A component sets data-tone="critical|high|medium|low|clean|unknown" and
+     uses these: bg-tone-tint, text-tone-stroke, bg-tone-solid, ... */
+  --color-tone-fill: var(--tone-fill);
+  --color-tone-stroke: var(--tone-stroke);
+  --color-tone-tint: var(--tone-tint);
+  --color-tone-solid: var(--tone-solid);
+  --color-tone-line: var(--tone-line);
+}
+
+:root {
+  --background: #fafafa;
+  --surface: #ffffff;
+  --subtle: #f4f4f5;
+  --foreground: #18181b;
+  --muted-foreground: #71717a;
+  --faint: #a1a1aa;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --primary: #18181b;
+  --primary-foreground: #ffffff;
+  --ring: #18181b;
+  --radius: 0.5rem;
+
+  --sev-critical-fill: #f8b4b4;
+  --sev-critical-stroke: #7f1d1d;
+  --sev-high-fill: #fbcfa4;
+  --sev-high-stroke: #7c2d12;
+  --sev-medium-fill: #fde68a;
+  --sev-medium-stroke: #78350f;
+  --sev-low-fill: #bfdbfe;
+  --sev-low-stroke: #1e3a8a;
+  --sev-clean-fill: #e5e7eb;
+  --sev-clean-stroke: #374151;
+  --sev-unknown-fill: #ede9fe;
+  --sev-unknown-stroke: #4c1d95;
+
+  /* Graph and chain constants, also from renderer.py. */
+  --label-text: #111827;
+  --edge: #374151;
+  --emphasis: #b3261e;
+}
+
+[data-tone='critical'] {
+  --tone-fill: var(--sev-critical-fill);
+  --tone-stroke: var(--sev-critical-stroke);
+}
+[data-tone='high'] {
+  --tone-fill: var(--sev-high-fill);
+  --tone-stroke: var(--sev-high-stroke);
+}
+[data-tone='medium'] {
+  --tone-fill: var(--sev-medium-fill);
+  --tone-stroke: var(--sev-medium-stroke);
+}
+[data-tone='low'] {
+  --tone-fill: var(--sev-low-fill);
+  --tone-stroke: var(--sev-low-stroke);
+}
+[data-tone='clean'] {
+  --tone-fill: var(--sev-clean-fill);
+  --tone-stroke: var(--sev-clean-stroke);
+}
+[data-tone='unknown'] {
+  --tone-fill: var(--sev-unknown-fill);
+  --tone-stroke: var(--sev-unknown-stroke);
+}
+[data-tone] {
+  /* Badge background: the fill lifted towards white. Stroke text on it is
+     darker than stroke on fill, so it passes AA whenever the pair does. */
+  --tone-tint: color-mix(in oklab, var(--tone-fill) 45%, white);
+  /* Dots and bars: between the pair in oklch, with the chroma raised so the
+     mix reads as a colour rather than a brown. Medium sits nearer its fill,
+     so amber stays lighter and yellower than high's orange; the two mixes
+     are otherwise too close in hue and lightness to tell apart at a glance. */
+  --tone-solid-mix: 55%;
+  --tone-solid: oklch(
+    from color-mix(in oklch, var(--tone-fill) var(--tone-solid-mix), var(--tone-stroke)) l
+      calc(c * 1.6) h
+  );
+  /* Hairline borders on tinted or filled shapes. */
+  --tone-line: color-mix(in oklab, var(--tone-fill) 55%, var(--tone-stroke));
+}
+[data-tone='medium'] {
+  --tone-solid-mix: 72%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-background font-sans text-foreground;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Inter cv05: lower-case l with a tail, so l and I differ in prose. */
+    font-feature-settings: 'cv05';
+  }
+  body {
+    @apply min-h-dvh text-sm;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+    font-feature-settings: normal;
+  }
+  table {
+    @apply tabular-nums;
+  }
+  /* Keyboard focus is always visible. Components that draw their own ring
+     (inputs, select triggers) opt out with outline-none. After a pointer
+     press no ring shows (see the focus-visible variant below). */
+  :focus-visible:where(:not([data-modality='pointer'] *), input, textarea) {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  [data-modality='pointer'] :focus-visible:not(input, textarea) {
+    outline: none;
+  }
+  ::selection {
+    background: #e4e4e7;
+  }
+}
+
+/*
+ * focus-visible:, for keyboard focus only. Radix focuses elements from script
+ * on mouse down and when overlays close, which browsers may count as
+ * focus-visible; lib/inputModality.ts marks <html data-modality="pointer">
+ * after a pointer press, and rings stay hidden until the next key. Text
+ * fields keep theirs: it shows where typing goes.
+ */
+@custom-variant focus-visible (&:focus-visible:where(:not([data-modality='pointer'] *), input, textarea));
+
+/* A focus treatment for fields: border darkens, a soft ring appears. */
+@utility focus-field {
+  outline: none;
+  &:focus-visible:where(:not([data-modality='pointer'] *), input, textarea) {
+    border-color: var(--foreground);
+    box-shadow: 0 0 0 3px rgb(24 24 27 / 0.12);
+  }
+}
+
+/*
+ * Reduced motion, everywhere: the sheet, popover, dialog and menu animations
+ * (tw-animate-css) and colour transitions end at once. A near-zero duration,
+ * not "none", so Radix still sees animationend and unmounts closing overlays.
+ * Spinners and the indeterminate bar already switch themselves off.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
