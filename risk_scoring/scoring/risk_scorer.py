@@ -2,7 +2,7 @@
 
 import math
 
-from models.risk_score import RiskScore
+from risk_scoring.models.risk_score import RiskScore
 
 _IMPACT_EXPONENT = 0.45
 _EXPOSURE_EXPONENT = 0.35

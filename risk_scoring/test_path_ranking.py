@@ -1,7 +1,7 @@
 import pytest
 
-from models.risk_score import RiskScore
-from scoring.path_ranking import dense_rank, top_ranked_paths
+from risk_scoring.models.risk_score import RiskScore
+from risk_scoring.scoring.path_ranking import dense_rank, top_ranked_paths
 
 
 def _rs(pid, score):

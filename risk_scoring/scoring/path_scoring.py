@@ -1,11 +1,11 @@
 """Orchestrate context-based scoring for a validated attack path."""
 
-from models.path_scoring_input import PathScoringInput
-from models.risk_score import RiskScore
-from scoring.exposure_score import compute_exposure_score
-from scoring.impact_score import compute_impact_score
-from scoring.path_ease import compute_path_ease
-from scoring.risk_scorer import RiskScoringEngine
+from risk_scoring.models.path_scoring_input import PathScoringInput
+from risk_scoring.models.risk_score import RiskScore
+from risk_scoring.scoring.exposure_score import compute_exposure_score
+from risk_scoring.scoring.impact_score import compute_impact_score
+from risk_scoring.scoring.path_ease import compute_path_ease
+from risk_scoring.scoring.risk_scorer import RiskScoringEngine
 
 
 def score_path(

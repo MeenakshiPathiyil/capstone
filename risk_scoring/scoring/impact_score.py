@@ -7,7 +7,7 @@ infrastructure scenarios before being treated as empirically calibrated.
 
 import math
 
-from graph_model.resource_metadata import (
+from risk_scoring.graph_model.resource_metadata import (
     CriticalityLevel,
     Environment,
 )

@@ -3,8 +3,8 @@
 import math
 from dataclasses import dataclass
 
-from graph_model.resource_metadata import CriticalityLevel, Environment
-from multipliers.reach_multiplier import ReachabilityClass
+from risk_scoring.graph_model.resource_metadata import CriticalityLevel, Environment
+from risk_scoring.multipliers.reach_multiplier import ReachabilityClass
 
 
 def _require_number(name, value, lo=None, hi=None):

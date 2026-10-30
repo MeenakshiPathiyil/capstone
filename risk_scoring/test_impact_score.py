@@ -2,8 +2,8 @@ import math
 
 import pytest
 
-from graph_model.resource_metadata import CriticalityLevel, Environment
-from scoring.impact_score import compute_impact_score
+from risk_scoring.graph_model.resource_metadata import CriticalityLevel, Environment
+from risk_scoring.scoring.impact_score import compute_impact_score
 
 
 BASE = {

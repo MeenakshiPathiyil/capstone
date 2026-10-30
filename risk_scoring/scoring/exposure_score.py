@@ -6,7 +6,7 @@ evaluated against representative infrastructure scenarios before being
 considered empirically calibrated.
 """
 
-from multipliers.reach_multiplier import ReachabilityClass
+from risk_scoring.multipliers.reach_multiplier import ReachabilityClass
 
 
 _EXPOSURE_SCORE_BY_REACHABILITY = {

@@ -1,7 +1,7 @@
 """Classify path-target reachability for the path-level risk model."""
 from __future__ import annotations
 
-from multipliers.reach_multiplier import ReachabilityClass
+from risk_scoring.multipliers.reach_multiplier import ReachabilityClass
 
 
 def classify_path_reachability(path, entry_resource_ids: set[str]) -> ReachabilityClass:

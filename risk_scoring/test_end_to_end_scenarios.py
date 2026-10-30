@@ -8,11 +8,11 @@ import math
 
 import pytest
 
-from examples.representative_attack_paths import SCENARIOS
-from graph_model.resource_metadata import CriticalityLevel, Environment
-from models.path_scoring_input import PathScoringInput
-from multipliers.reach_multiplier import ReachabilityClass
-from scoring.path_scoring import score_path
+from risk_scoring.examples.representative_attack_paths import SCENARIOS
+from risk_scoring.graph_model.resource_metadata import CriticalityLevel, Environment
+from risk_scoring.models.path_scoring_input import PathScoringInput
+from risk_scoring.multipliers.reach_multiplier import ReachabilityClass
+from risk_scoring.scoring.path_scoring import score_path
 
 
 def _input(**overrides):

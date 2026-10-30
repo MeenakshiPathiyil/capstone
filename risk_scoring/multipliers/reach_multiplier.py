@@ -1,11 +1,7 @@
-from enum import Enum
-from graph_model.graph_node import ReachabilityClass
-
-
-class ReachabilityClass(Enum):
-    DIRECT = "direct"
-    VIA_PATH = "via_path"
-    POST_COMPROMISE = "post_compromise"
+# One ReachabilityClass, defined with the graph model. This module used to
+# import it and then define a second enum of the same name, so the two were
+# different types and an isinstance check against one rejected the other.
+from risk_scoring.graph_model.graph_node import ReachabilityClass
 
 
 # Frozen V1 values. Authored modeling choices, not empirically

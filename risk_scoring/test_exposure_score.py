@@ -1,7 +1,7 @@
 import pytest
 
-from multipliers.reach_multiplier import ReachabilityClass
-from scoring.exposure_score import compute_exposure_score
+from risk_scoring.multipliers.reach_multiplier import ReachabilityClass
+from risk_scoring.scoring.exposure_score import compute_exposure_score
 
 
 @pytest.mark.parametrize(

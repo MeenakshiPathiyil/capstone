@@ -3,10 +3,10 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from models.path_scoring_input import PathScoringInput
-from models.risk_score import RiskScore
-from scoring.path_scoring import score_path
-from scoring.risk_scorer import RiskScoringEngine
+from risk_scoring.models.path_scoring_input import PathScoringInput
+from risk_scoring.models.risk_score import RiskScore
+from risk_scoring.scoring.path_scoring import score_path
+from risk_scoring.scoring.risk_scorer import RiskScoringEngine
 
 DEFAULT_TOP_N = 5
 # Scores are rounded before ranking so floating-point noise does not split

@@ -4,17 +4,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from graph_analysis.blast_radius import (
+from risk_scoring.graph_analysis.blast_radius import (
     compute_downstream_counts,
     compute_graph_median_reachable,
 )
-from graph_analysis.reachability import classify_path_reachability
-from graph_model.resource_metadata import (
+from risk_scoring.graph_analysis.reachability import classify_path_reachability
+from risk_scoring.graph_model.resource_metadata import (
     CriticalityLevel,
     Environment,
     ResourceMetadata,
 )
-from models.path_scoring_input import PathScoringInput
+from risk_scoring.models.path_scoring_input import PathScoringInput
 
 
 def _parse_enum(enum_type, value, field_name):
