@@ -1,0 +1,44 @@
+# Allowlist: only what the deployed app runs goes into the image. Secrets
+# (app/api/.env), the adapter weights, virtual environments, node_modules and
+# saved analyses never do.
+*
+
+!requirements.txt
+!main.py
+!attack_path
+!engine
+!models
+!parser
+!processing
+!runner
+!security_state_graph
+!risk_scoring
+!utils
+!data
+!sample_yamls
+!tests/fixtures/nested
+
+# The prompt builder the scenario contract imports, and nothing else from
+# scenario_generation/.
+!scenario_generation/__init__.py
+!scenario_generation/prompt_generator.py
+!scenario_generation/fine_tuning/prompt_format.py
+
+!app/__init__.py
+!app/api
+!app/web
+!app/deploy
+
+app/api/.env
+app/api/tests
+app/web/node_modules
+app/web/dist
+app/web/dist-e2e
+app/web/test-results
+app/web/playwright-report
+data/infra_output.json
+risk_scoring/test_*.py
+risk_scoring/examples
+**/__pycache__
+**/*.pyc
+**/.DS_Store

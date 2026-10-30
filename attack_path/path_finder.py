@@ -439,7 +439,11 @@ def describe_path(state_graph, path, objective=None):
         # denial-of-service narrative.
         "objective": (objective or {}).get("id"),
         "objective_name": (objective or {}).get("name"),
-        "objective_techniques": (objective or {}).get("techniques") or []
+        "objective_techniques": (objective or {}).get("techniques") or [],
+
+        # The weight score_path added for the objective, so the score can be
+        # recomposed from this record alone. See scoring.score_breakdown.
+        "objective_weight": float((objective or {}).get("base_weight") or 0.0)
     }
 
 

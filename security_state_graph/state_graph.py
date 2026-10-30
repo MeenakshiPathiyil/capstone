@@ -593,6 +593,21 @@ def write_state_graph(state_graph, files=None):
 def evaluate_findings(infra, rules_path=RULES_PATH):
     """Every finding on `infra`: the rule engine's, plus privilege escalation.
 
+    The findings half of evaluate_findings_with_errors, for the callers that
+    only ever printed the errors.
+    """
+
+    findings, _ = evaluate_findings_with_errors(infra, rules_path)
+
+    return findings
+
+
+def evaluate_findings_with_errors(infra, rules_path=RULES_PATH):
+    """(findings, errors): every finding on `infra`, and every rule that raised.
+
+    `errors` is RuleEngine.evaluation_errors. A caller that cannot print to a
+    terminal, such as the app, needs them as data to say the analysis is partial.
+
     THEORY (why escalation findings do not come from the rule engine):
     engine/condition_evaluator.py compares a field to a value. A privilege
     escalation method asks whether the set of actions a principal holds *covers*
@@ -626,7 +641,7 @@ def evaluate_findings(infra, rules_path=RULES_PATH):
 
     findings.extend(privesc_findings(infra))
 
-    return findings
+    return findings, engine.evaluation_errors
 
 
 def privesc_findings(infra):

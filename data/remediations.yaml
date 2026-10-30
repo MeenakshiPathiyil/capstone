@@ -1,0 +1,369 @@
+# Remediation catalog: what to change for each finding.
+#
+# Keyed two ways:
+#   rules:    by rule `source_id` in data/security_rules.yaml. One fix per check, shared
+#             by every resource type that check applies to, so a check written once per
+#             resource type (REQUIRED_TAGS, RESTRICTED_INCOMING_TRAFFIC,
+#             INCOMING_SSH_DISABLED) has a single entry.
+#   methods:  by privilege escalation method `id` in data/privesc_methods.yaml, plus the
+#             two broad-grant ids in engine/privesc_detector.BROAD_GRANT_RULE_IDS.
+#
+# Each entry has:
+#   fix              what to change, in one or two plain sentences
+#   snippet          optional CloudFormation YAML fragment showing the fixed property,
+#                    only where it genuinely helps; absent for IAM methods and for
+#                    account-level checks that have no CloudFormation property
+#   url              the authoritative source (AWS Config rule page, AWS docs, or the
+#                    Rhino Security Labs README section for a method)
+#   by_resource_type optional; replaces the snippet for one CloudFormation type when the
+#                    property path differs between the types a check covers. Each key
+#                    must be a resource type one of that source_id's rules targets.
+#
+# tests/test_remediations.py checks that every source_id and method id has an entry,
+# that no entry names an id that does not exist, and that every snippet parses.
+
+rules:
+
+  # -- Network exposure ----------------------------------------------------------
+
+  RESTRICTED_INCOMING_TRAFFIC:
+    fix: >-
+      Replace the 0.0.0.0/0 and ::/0 source on TCP ports 20, 21, 3306, 3389 and 4333
+      with the specific CIDR range or source security group that needs access.
+    snippet: |
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+    url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-common-ports.html
+    by_resource_type:
+      AWS::EC2::SecurityGroupIngress:
+        snippet: |
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+
+  INCOMING_SSH_DISABLED:
+    fix: >-
+      Replace the 0.0.0.0/0 and ::/0 source on port 22 with the specific CIDR range of
+      your bastion or VPN, or remove the rule and use SSM Session Manager instead.
+    snippet: |
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/16
+    url: https://docs.aws.amazon.com/config/latest/developerguide/restricted-ssh.html
+    by_resource_type:
+      AWS::EC2::SecurityGroupIngress:
+        snippet: |
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/16
+
+  EC2_PUBLIC_IP:
+    fix: >-
+      Turn off AssociatePublicIpAddress on the instance's network interface and put the
+      instance in a private subnet. Reach it through a load balancer, a VPN or SSM
+      Session Manager.
+    snippet: |
+      NetworkInterfaces:
+        - DeviceIndex: "0"
+          AssociatePublicIpAddress: false
+          SubnetId: !Ref PrivateSubnet
+          GroupSet: [!Ref AppSecurityGroup]
+    url: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-ec2-instance-networkinterface.html
+
+  ELB_INTERNET_FACING:
+    fix: >-
+      Set Scheme to internal if the load balancer only serves clients inside your VPC or
+      network. If it must be public, keep internet-facing and make sure the backends
+      accept traffic only from the load balancer's security group.
+    snippet: |
+      Scheme: internal
+    url: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-elasticloadbalancingv2-loadbalancer.html
+
+  RDS_PUBLICLY_ACCESSIBLE:
+    fix: >-
+      Set PubliclyAccessible to false and place the instance in private subnets. Connect
+      from the application's security group or over a VPN.
+    snippet: |
+      PubliclyAccessible: false
+    url: https://docs.aws.amazon.com/config/latest/developerguide/rds-instance-public-access-check.html
+
+  EC2_IMDSV1_ENABLED:
+    fix: >-
+      Require IMDSv2 by setting HttpTokens to required in the instance's MetadataOptions.
+      Software that still calls IMDSv1 must be updated to fetch a session token first.
+    snippet: |
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+    url: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html
+
+  # -- Storage -------------------------------------------------------------------
+
+  S3_BUCKET_LEVEL_PUBLIC_ACCESS_PROHIBITED:
+    fix: >-
+      Set all four S3 Block Public Access flags to true on the bucket. A bucket that
+      must serve public content should do it through CloudFront with origin access
+      control, not through public access.
+    snippet: |
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-level-public-access-prohibited.html
+
+  S3_BUCKET_PUBLIC_READ_PROHIBITED:
+    fix: >-
+      Remove the public-read ACL and any bucket policy statement that lets Principal "*"
+      read objects, and turn on BlockPublicAcls and BlockPublicPolicy so neither can come back.
+    snippet: |
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-public-read-prohibited.html
+
+  S3_BUCKET_POLICY_GRANTEE_CHECK:
+    fix: >-
+      Remove every Allow statement whose principal is outside the trusted set, or narrow
+      it to the specific accounts or roles that need access. Where the grantee must be an
+      address range, add an aws:SourceIp condition limited to the trusted CIDRs.
+    snippet: |
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {AWS: "arn:aws:iam::111122223333:root"}
+            Action: s3:GetObject
+            Resource: !Sub "${DataBucket.Arn}/*"
+    url: https://docs.aws.amazon.com/config/latest/developerguide/s3-bucket-policy-grantee-check.html
+
+  S3_WILDCARD_POLICY:
+    fix: >-
+      Replace the "*" action with the specific s3 actions the principal needs, and replace
+      the "*" principal with the accounts or roles that need access. Anyone-can-do-anything
+      statements should be deleted.
+    snippet: |
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {AWS: "arn:aws:iam::111122223333:role/AppRole"}
+            Action: [s3:GetObject, s3:PutObject]
+            Resource: !Sub "${DataBucket.Arn}/*"
+    url: https://docs.aws.amazon.com/AmazonS3/latest/userguide/security-best-practices.html
+
+  RDS_STORAGE_ENCRYPTED:
+    fix: >-
+      Set StorageEncrypted to true, with a KmsKeyId if you need a customer managed key.
+      An existing unencrypted instance cannot be changed in place; restore it from an
+      encrypted copy of a snapshot.
+    snippet: |
+      StorageEncrypted: true
+      KmsKeyId: !Ref DatabaseKey
+    url: https://docs.aws.amazon.com/config/latest/developerguide/rds-storage-encrypted.html
+
+  # -- Identity ------------------------------------------------------------------
+
+  IAM_WILDCARD_PERMISSIONS:
+    fix: >-
+      Replace Action "*" on Resource "*" with the specific actions and resource ARNs the
+      role needs, and name the services allowed to assume it instead of Principal Service "*".
+    snippet: |
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: lambda.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: app
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject]
+                Resource: !Sub "${DataBucket.Arn}/*"
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege
+
+  IAM_TRUST_POLICY_WILDCARD:
+    fix: >-
+      Name the exact accounts, roles or services allowed to assume the role in the trust
+      policy's Principal. Never use "*", and if an account root is trusted, add a
+      condition such as sts:ExternalId or aws:PrincipalOrgID.
+    snippet: |
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {AWS: "arn:aws:iam::111122223333:role/Deployer"}
+            Action: sts:AssumeRole
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_principal.html
+
+  IAM_PASSWORD_POLICY:
+    fix: >-
+      Set the account password policy to require uppercase, lowercase, numbers and
+      symbols, a minimum length of 14, password reuse prevention of 24 and a maximum age
+      of 90 days. CloudFormation has no resource for it, so apply it with
+      aws iam update-account-password-policy.
+    url: https://docs.aws.amazon.com/config/latest/developerguide/iam-password-policy.html
+
+  ROOT_ACCOUNT_MFA_ENABLED:
+    fix: >-
+      Sign in as the root user and enable MFA, preferably with a hardware or passkey
+      device. CloudFormation cannot configure root MFA, so this is a manual console step.
+    url: https://docs.aws.amazon.com/config/latest/developerguide/root-account-mfa-enabled.html
+
+  # -- Logging and governance ----------------------------------------------------
+
+  CLOUD_TRAIL_ENABLED:
+    fix: >-
+      Create a multi-region trail that is logging, delivering to an S3 bucket with log
+      file validation on, so account activity is recorded and tamper-evident.
+    snippet: |
+      Type: AWS::CloudTrail::Trail
+      Properties:
+        IsLogging: true
+        IsMultiRegionTrail: true
+        EnableLogFileValidation: true
+        S3BucketName: !Ref TrailBucket
+    url: https://docs.aws.amazon.com/config/latest/developerguide/cloudtrail-enabled.html
+
+  REQUIRED_TAGS:
+    fix: >-
+      Add a CostCenter tag with a non-empty value to the resource, or to the stack so it
+      propagates.
+    snippet: |
+      Tags:
+        - Key: CostCenter
+          Value: "1234"
+    url: https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html
+
+methods:
+
+  PRIVESC_CREATE_POLICY_VERSION:
+    fix: "Remove iam:CreatePolicyVersion from every principal that is not an IAM administrator. Where it is needed, limit Resource to the specific policy ARNs the principal manages, never the policies attached to itself."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#1-creating-a-new-policy-version
+
+  PRIVESC_SET_DEFAULT_POLICY_VERSION:
+    fix: "Remove iam:SetDefaultPolicyVersion from every principal that is not an IAM administrator. Where it is needed, limit Resource to specific policy ARNs and delete old policy versions that grant more than the current one."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#2-setting-the-default-policy-version-to-an-existing-version
+
+  PRIVESC_ATTACH_USER_POLICY:
+    fix: "Remove iam:AttachUserPolicy from non-administrators. Where it is needed, limit Resource to specific user ARNs and use the iam:PolicyARN condition key to allow only named, low-privilege policies."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#7-attaching-a-policy-to-a-user
+
+  PRIVESC_ATTACH_GROUP_POLICY:
+    fix: "Remove iam:AttachGroupPolicy from non-administrators. Where it is needed, limit Resource to specific group ARNs and use the iam:PolicyARN condition key to allow only named, low-privilege policies."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#8-attaching-a-policy-to-a-group
+
+  PRIVESC_ATTACH_ROLE_POLICY:
+    fix: "Remove iam:AttachRolePolicy from non-administrators. Where it is needed, limit Resource to specific role ARNs and use the iam:PolicyARN condition key to allow only named, low-privilege policies."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#9-attaching-a-policy-to-a-role
+
+  PRIVESC_PUT_USER_POLICY:
+    fix: "Remove iam:PutUserPolicy from non-administrators. Where it is needed, limit Resource to specific user ARNs and never include the calling principal. Attach a permissions boundary to the principals that need this action, so the policies they can create or attach cannot exceed the boundary."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#10-creatingupdating-an-inline-policy-for-a-user
+
+  PRIVESC_PUT_GROUP_POLICY:
+    fix: "Remove iam:PutGroupPolicy from non-administrators. Where it is needed, limit Resource to specific group ARNs, and never to a group the caller belongs to. Attach a permissions boundary to the principals that need this action, so the policies they can create or attach cannot exceed the boundary."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#11-creatingupdating-an-inline-policy-for-a-group
+
+  PRIVESC_PUT_ROLE_POLICY:
+    fix: "Remove iam:PutRolePolicy from non-administrators. Where it is needed, limit Resource to specific role ARNs and never to a role the caller can assume. Attach a permissions boundary to the principals that need this action, so the policies they can create or attach cannot exceed the boundary."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#12-creatingupdating-an-inline-policy-for-a-role
+
+  PRIVESC_ADD_USER_TO_GROUP:
+    fix: "Remove iam:AddUserToGroup from non-administrators. Where it is needed, limit Resource to the ARNs of low-privilege groups only, and keep administrator groups out of that list."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#13-adding-a-user-to-a-group
+
+  PRIVESC_CREATE_ACCESS_KEY:
+    fix: "Remove iam:CreateAccessKey from non-administrators, or limit Resource to the caller's own user with arn:aws:iam::ACCOUNT:user/${aws:username}. Never allow it on Resource: \"*\"."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#4-creating-a-new-user-access-key
+
+  PRIVESC_CREATE_LOGIN_PROFILE:
+    fix: "Remove iam:CreateLoginProfile from non-administrators. Where it is needed, limit Resource to specific low-privilege user ARNs and never to administrators."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#5-creating-a-new-login-profile
+
+  PRIVESC_UPDATE_LOGIN_PROFILE:
+    fix: "Remove iam:UpdateLoginProfile from non-administrators. Where it is needed, limit Resource to the caller's own user with arn:aws:iam::ACCOUNT:user/${aws:username}, and require MFA for console sign-in."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#6-updating-an-existing-login-profile
+
+  PRIVESC_UPDATE_ASSUME_ROLE_POLICY:
+    fix: "Remove iam:UpdateAssumeRolePolicy from non-administrators. Where it is needed, limit Resource to specific role ARNs, and do not combine it with sts:AssumeRole on the same roles."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#14-updating-the-assumerolepolicydocument-of-a-role
+
+  PRIVESC_PASSROLE_EC2:
+    fix: "Limit iam:PassRole to the specific role ARNs the principal must pass, and add the iam:PassedToService condition set to ec2.amazonaws.com. Do not grant it alongside ec2:RunInstances on Resource: \"*\"."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#3-creating-an-ec2-instance-with-an-existing-instance-profile
+
+  PRIVESC_PASSROLE_LAMBDA_INVOKE:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to lambda.amazonaws.com. Do not give one principal iam:PassRole, lambda:CreateFunction and lambda:InvokeFunction together."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#15-passing-a-role-to-a-new-lambda-function-then-invoking-it
+
+  PRIVESC_PASSROLE_LAMBDA_CROSS_ACCOUNT:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to lambda.amazonaws.com, and limit lambda:AddPermission to specific function ARNs. Do not give one principal all three actions."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#16-passing-a-role-to-a-new-lambda-function-then-invoking-it-cross-account
+
+  PRIVESC_PASSROLE_LAMBDA_DYNAMODB:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to lambda.amazonaws.com. Limit lambda:CreateEventSourceMapping to specific function ARNs and do not combine it with lambda:CreateFunction."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#17-passing-a-role-to-a-new-lambda-function-then-triggering-it-with-dynamodb
+
+  PRIVESC_PASSROLE_GLUE_DEV_ENDPOINT:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to glue.amazonaws.com. Remove glue:CreateDevEndpoint from principals that do not run Glue development."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#19-passing-a-role-to-a-glue-development-endpoint
+
+  PRIVESC_PASSROLE_CLOUDFORMATION:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to cloudformation.amazonaws.com. The roles passed must be scoped to what that stack needs, not administrator."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#21-passing-a-role-to-cloudformation
+
+  PRIVESC_PASSROLE_DATA_PIPELINE:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to datapipeline.amazonaws.com. Remove datapipeline:CreatePipeline and datapipeline:PutPipelineDefinition from principals that do not manage pipelines."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#22-passing-a-role-to-data-pipeline
+
+  PRIVESC_PASSROLE_SAGEMAKER:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to sagemaker.amazonaws.com. Remove sagemaker:CreateNotebookInstance from principals that do not manage notebooks."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#27-passing-a-role-to-a-new-sagemaker-jupyter-notebook
+
+  PRIVESC_PASSROLE_CODESTAR:
+    fix: "Limit iam:PassRole to specific role ARNs with the iam:PassedToService condition set to codestar.amazonaws.com. Remove codestar:CreateProject from principals that do not create projects, or stop using CodeStar."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#24-passing-a-role-to-a-new-codestar-project
+
+  PRIVESC_CODESTAR_FROM_TEMPLATE:
+    fix: "Remove codestar:CreateProjectFromTemplate from every principal that is not a CodeStar administrator. The project it creates carries template privileges and a CloudFormation role the caller can use, so it cannot be scoped safely; stop using CodeStar if you can."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#23-creating-a-codestar-project-from-a-template
+
+  PRIVESC_CODESTAR_ASSOCIATE_TEAM_MEMBER:
+    fix: "Remove codestar:AssociateTeamMember from principals that do not need it, and limit Resource to specific project ARNs. Do not give one principal both codestar:CreateProject and codestar:AssociateTeamMember."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#25-creating-a-new-codestar-project-and-associating-a-team-member
+
+  PRIVESC_LAMBDA_UPDATE_CODE:
+    fix: "Limit lambda:UpdateFunctionCode to the ARNs of functions the principal owns, and remove it for functions whose execution role is more privileged than the caller. Require code signing on those functions."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#18-updating-the-code-of-an-existing-lambda-function
+
+  PRIVESC_LAMBDA_UPDATE_CONFIG:
+    fix: "Limit lambda:UpdateFunctionConfiguration to the ARNs of functions the principal owns, and use the lambda:Layer condition key to allow only approved layer ARNs."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#26-adding-a-malicious-lambda-layer-to-an-existing-lambda-function
+
+  PRIVESC_GLUE_UPDATE_DEV_ENDPOINT:
+    fix: "Limit glue:UpdateDevEndpoint to the specific dev endpoint ARNs the principal owns, and remove it from principals that do not run Glue development. Delete dev endpoints that are not in use."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#20-updating-an-existing-glue-dev-endpoint
+
+  PRIVESC_SAGEMAKER_PRESIGNED_URL:
+    fix: "Limit sagemaker:CreatePresignedNotebookInstanceUrl to specific notebook ARNs the principal owns. Where possible add the sagemaker:ResourceTag condition so users can open only their own notebooks."
+    url: https://github.com/RhinoSecurityLabs/AWS-IAM-Privilege-Escalation#28-gaining-access-to-an-existing-sagemaker-jupyter-notebook
+
+  # -- Wildcard grants the escalation catalogue does not name --------------------
+  # Not Rhino methods: engine/privesc_detector.py reports them for a grant it has
+  # no single method for, under these ids (BROAD_GRANT_RULE_IDS), so they are
+  # looked up here and carry an AWS documentation url instead.
+
+  WILDCARD_ADMIN_VIA_ATTACHED_POLICY:
+    fix: "Replace the attached policy that allows Action * on Resource * with one that lists only the actions and resources the principal needs. If full administrator access is required, give it to a separate, tightly controlled role that needs MFA to assume, not to a workload role."
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html#grant-least-privilege
+
+  BROAD_SERVICE_WILDCARD_GRANT:
+    fix: "Replace the <service>:* grant with the specific actions the principal calls, and limit Resource to the ARNs it works with. IAM Access Analyzer can generate a least-privilege policy from the principal's CloudTrail activity."
+    url: https://docs.aws.amazon.com/IAM/latest/UserGuide/access-analyzer-policy-generation.html

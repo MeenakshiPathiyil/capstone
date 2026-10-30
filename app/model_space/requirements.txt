@@ -1,0 +1,21 @@
+# Runtime for the private ZeroGPU Space. Gradio itself comes from sdk_version
+# in README.md, not from this file.
+#
+# Pinned to the stack that trained the adapter (fine_tuning/output/README.md
+# and adapter_config.json): torch 2.10.0, transformers 5.0.0, PEFT 0.18.1,
+# tokenizers 0.22.2. torch 2.10.0 is on the ZeroGPU supported list.
+# CONFIRM AT DEPLOYMENT, then replace with the versions the running Space
+# reports at /metadata:
+#   - bitsandbytes: the training notes say only "0.49.x"; 0.49.2 is the last
+#     0.49 release. NF4 on ZeroGPU's Blackwell GPUs is unverified.
+#   - accelerate: not recorded by training; 1.12.0 is the release current with
+#     transformers 5.0.0.
+#   - spaces: normally provided by ZeroGPU; listed so the import resolves.
+torch==2.10.0
+transformers==5.0.0
+tokenizers==0.22.2
+peft==0.18.1
+bitsandbytes==0.49.2
+accelerate==1.12.0
+safetensors
+spaces

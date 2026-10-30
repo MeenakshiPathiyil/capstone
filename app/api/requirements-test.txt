@@ -1,0 +1,5 @@
+-r requirements.txt
+# Starlette's TestClient prefers httpx2 and deprecates plain httpx.
+httpx2==2.16.0
+pytest==9.1.1
+pypdf==6.21.2

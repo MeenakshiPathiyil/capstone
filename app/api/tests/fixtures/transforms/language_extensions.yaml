@@ -1,0 +1,12 @@
+Transform: AWS::LanguageExtensions
+Parameters:
+  Names: {Type: CommaDelimitedList, Default: 'a,b'}
+Resources:
+  B:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ['-', [!Ref 'AWS::StackName', !Select [0, !Ref Names]]]
+      Tags: [{Key: len, Value: !Ref 'AWS::Region'}]
+Outputs:
+  L:
+    Value: {'Fn::Length': !Ref Names}

@@ -143,6 +143,50 @@ def score_path(state_graph, path, objective=None):
     return round(score, 2)
 
 
+def score_breakdown(path):
+    """Every term of score_path, recomposed from a described path.
+
+    Reads only the dictionary describe_path returned, so a reader holding a saved
+    path can show how its score was reached. Dedupes on (resource, state) in path
+    order, the same walk path_severity_total makes, so the two totals agree.
+    """
+
+    counted = []
+    total = 0.0
+
+    for finding in path["states"]:
+
+        weakness = (finding.get("resource"), finding.get("state"))
+
+        if weakness in counted:
+            continue
+
+        counted.append(weakness)
+
+        total = total + finding_weight(finding)
+
+    hops = max(path["length"], 1)
+
+    length_factor = LENGTH_DAMPING_PER_HOP ** (hops - 1)
+
+    boost = PUBLIC_ENTRY_BOOST if path["public_entry"] else 1.0
+
+    return {
+        "severity_total": total,
+        "objective_weight": path["objective_weight"],
+        "hops": hops,
+        "length_factor": length_factor,
+        "public_entry": path["public_entry"],
+        "boost": boost,
+        "score": round(
+            (total + path["objective_weight"]) * length_factor * boost,
+            2
+        ),
+        "threshold_high": HIGH_SCORE_THRESHOLD,
+        "threshold_critical": CRITICAL_SCORE_THRESHOLD
+    }
+
+
 def select_high_risk(paths, min_level=ATTACK_LEVEL_HIGH):
     """The paths at or above `min_level`. Task 8's selection step.
 
