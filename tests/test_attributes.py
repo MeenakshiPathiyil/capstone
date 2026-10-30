@@ -204,3 +204,83 @@ def test_a_bucket_policy_grantee_is_who_an_allow_statement_grants():
     projected = {item["id"]: item["attributes"] for item in project_all(records)}
 
     assert projected["Bucket"]["BucketPolicy.Grantee"] == ["203.0.113.0/24", "*"]
+
+
+# -- String booleans -----------------------------------------------------------
+
+def test_a_quoted_false_is_not_encrypted():
+    """Synthetic case s06: `StorageEncrypted: 'false'` read as True, because
+    bool("false") is True in Python, so an unencrypted database passed."""
+
+    for spelling in ("false", "False", "FALSE", " false "):
+
+        attributes = project(record("Db", "AWS::RDS::DBInstance", {
+            "StorageEncrypted": spelling
+        }))
+
+        assert attributes["StorageEncrypted"] is False
+
+    assert project(record("Db", "AWS::RDS::DBInstance", {
+        "StorageEncrypted": "true"
+    }))["StorageEncrypted"] is True
+
+
+def test_a_quoted_false_does_not_block_public_access():
+
+    attributes = project(record("Bucket", "AWS::S3::Bucket", {
+        "PublicAccessBlockConfiguration": {
+            "BlockPublicAcls": "false",
+            "BlockPublicPolicy": "True",
+            "IgnorePublicAcls": True,
+            "RestrictPublicBuckets": False
+        }
+    }))
+
+    assert attributes["PublicAccessBlockConfiguration.BlockPublicAcls"] is False
+    assert attributes["PublicAccessBlockConfiguration.BlockPublicPolicy"] is True
+    assert attributes["PublicAccessBlockConfiguration.IgnorePublicAcls"] is True
+    assert attributes["PublicAccessBlockConfiguration.RestrictPublicBuckets"] is False
+
+
+def test_a_top_level_string_boolean_is_projected_as_a_boolean():
+    """The rules read `PubliclyAccessible` raw, and `equals true` does not match
+    the string "true". Projected, the evaluator finds the boolean first."""
+
+    attributes = project(record("Db", "AWS::RDS::DBInstance", {
+        "PubliclyAccessible": "TRUE",
+        "MultiAZ": True,
+        "DBInstanceClass": "db.t3.micro",
+        "AllocatedStorage": "20"
+    }))
+
+    assert attributes["PubliclyAccessible"] is True
+
+    # Only string spellings are projected. Anything else still resolves to what
+    # the template says.
+    assert "MultiAZ" not in attributes
+    assert "DBInstanceClass" not in attributes
+    assert "AllocatedStorage" not in attributes
+
+
+def test_quoted_booleans_fire_the_same_rules_as_real_ones():
+    """End to end through the ruleset: the quoted database is as public and as
+    unencrypted as the unquoted one."""
+
+    from main import build_infra_from_resources
+    from security_state_graph.state_graph import evaluate_findings
+
+    def rule_ids(properties):
+
+        infra = build_infra_from_resources([
+            dict(record("Db", "AWS::RDS::DBInstance", properties),
+                 semantic_properties={})
+        ])
+
+        return {finding["rule_id"] for finding in evaluate_findings(infra)}
+
+    quoted = rule_ids({"PubliclyAccessible": "true", "StorageEncrypted": "false"})
+    unquoted = rule_ids({"PubliclyAccessible": True, "StorageEncrypted": False})
+
+    assert quoted == unquoted
+    assert "RDS_PUBLICLY_ACCESSIBLE" in quoted
+    assert "aws_config:RDS_STORAGE_ENCRYPTED:AWS::RDS::DBInstance" in quoted
