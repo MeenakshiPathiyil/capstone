@@ -13,10 +13,16 @@ derivation is documented where it is made.
 An absent `PublicAccessBlockConfiguration` projects as all four flags False,
 because that is AWS's default and it is the insecure one.
 
-Not done: intrinsic functions (`!Ref Foo` is already the string "Foo" by now,
-`!GetAtt` and `Fn::Sub` are not resolved), cross-account reasoning, and policy
-documents built by `Fn::Join`, whose conclusions come out False rather than
-guessed at.
+Booleans are read through as_bool(), because CloudFormation accepts "true" and
+"false" in any case wherever a Boolean is expected. A top-level property spelled
+that way is also projected as a boolean under its own name, so a rule reading
+`PubliclyAccessible equals true` matches `PubliclyAccessible: 'true'`.
+
+Not done: intrinsic functions beyond what parser/infra_parser resolves (by now
+`!Ref Foo` and `!GetAtt Foo.Arn` are the string "Foo", a Ref to a parameter with
+a Default is that default, and `Fn::Sub` and `Fn::Join` are not evaluated),
+cross-account reasoning, and policy documents built by `Fn::Join`, whose
+conclusions come out False rather than guessed at.
 """
 
 
@@ -174,6 +180,67 @@ def port_range(from_port, to_port):
     return PortRange(low, high)
 
 
+def boolean_spelling(value):
+    """True or False when `value` spells a CloudFormation Boolean, else None.
+
+    CloudFormation accepts the strings "true" and "false", in any case, wherever
+    a Boolean property is expected, and a parameter resolved by the parser is
+    always a string. Python's bool("false") is True, which is how
+    `StorageEncrypted: 'false'` used to read as encrypted.
+    """
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+
+        lowered = value.strip().lower()
+
+        if lowered == "true":
+            return True
+
+        if lowered == "false":
+            return False
+
+    return None
+
+
+def as_bool(value):
+    """`value` read as a Boolean property.
+
+    A value that is not a Boolean spelling, such as the name of a parameter with
+    no Default, keeps the truthiness the projection always gave it, so this only
+    changes the answer for the strings "true" and "false".
+    """
+
+    spelled = boolean_spelling(value)
+
+    return bool(value) if spelled is None else spelled
+
+
+def boolean_properties(properties):
+    """Every top-level property spelled as a string Boolean, as a real one.
+
+    The rules read raw properties as well as projected ones, through
+    `_structured`, and `equals` deliberately does not coerce
+    (engine/condition_evaluator.compare). So `PubliclyAccessible: 'true'` never
+    equalled the rule's `true` and the finding was dropped. Projected here, under
+    the property's own name, it is what the evaluator finds first.
+
+    Only string spellings are projected, so a property that is already a
+    boolean, or is anything else, still resolves to the template's value.
+    """
+
+    projected = {}
+
+    for name, value in properties.items():
+
+        if isinstance(value, str) and boolean_spelling(value) is not None:
+            projected[name] = boolean_spelling(value)
+
+    return projected
+
+
 def as_list(value):
     """`value` as a list, treating None as empty and a scalar as one item."""
 
@@ -292,7 +359,7 @@ def public_access_block(properties):
         block = {}
 
     return {
-        "%s.%s" % (PUBLIC_ACCESS_BLOCK, flag): bool(block.get(flag, False))
+        "%s.%s" % (PUBLIC_ACCESS_BLOCK, flag): as_bool(block.get(flag, False))
         for flag in PUBLIC_ACCESS_FLAGS
     }
 
@@ -439,6 +506,8 @@ def project(resource, records=None):
 
     attributes = {TAGS: tag_keys(properties)}
 
+    attributes.update(boolean_properties(properties))
+
     # -----------------------------
 
     if resource_type in (SECURITY_GROUP, SECURITY_GROUP_INGRESS):
@@ -474,7 +543,7 @@ def project(resource, records=None):
     # -----------------------------
 
     if resource_type == RDS_INSTANCE:
-        attributes[STORAGE_ENCRYPTED] = bool(
+        attributes[STORAGE_ENCRYPTED] = as_bool(
             properties.get(STORAGE_ENCRYPTED, False)
         )
 
