@@ -32,6 +32,11 @@ class RuleEngine:
 
         self.rule_index = self._build_index(self.rules)
 
+        # Every rule that raised, as {"rule_id", "resource", "error"}. The print
+        # below is for the command line; this list is for a caller that has to
+        # report the failure rather than let it scroll past.
+        self.evaluation_errors = []
+
     def _build_index(self, rules):
         """Hash-based rule index."""
 
@@ -125,6 +130,12 @@ class RuleEngine:
                     f"Warning: failed to evaluate "
                     f"{rule.get('id', 'unknown')}: {e}"
                 )
+
+                self.evaluation_errors.append({
+                    "rule_id": rule.get("id", "unknown"),
+                    "resource": resource.get("id"),
+                    "error": str(e)
+                })
 
         return matches
 

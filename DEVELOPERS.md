@@ -367,6 +367,25 @@ per path with exactly seven keys. That key set is the contract with
 anywhere, no install) and Graphviz DOT (for a print-quality image). Both come from
 the same dictionary, so they cannot disagree.
 
+**`risk_scoring/`** is a second, contextual opinion on each path. It does not
+change the score above, the bands, the order or the export. `analyze()` runs it
+over every path through `risk_scoring/integration/pipeline_adapter.py`:
+
+```
+impact     tag-derived criticality base (unknown 50), +10 sensitive data,
+           +10 production, + up to 20 for blast radius (downstream resources
+           relative to the graph median)
+exposure   90 if the target is itself an entry point, 65 via the path,
+           40 after a foothold
+path ease  100 x e^(-0.4 x (hops - 1))
+score      100 x (I/100)^0.45 x (E/100)^0.35 x (A/100)^0.20
+```
+
+Impact reads the target's CloudFormation tags (`Environment`, `Criticality`,
+`DataClassification`, `SensitiveData` and close variants, listed in the
+adapter). A template without them scores every target as unknown. These
+weights are also judgement, not measurement.
+
 ---
 
 ### Runners

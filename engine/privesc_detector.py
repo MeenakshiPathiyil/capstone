@@ -399,6 +399,12 @@ def granted_actions_for(resource, attached=None):
 ADMIN_VIA_ATTACHED_STATE = "wildcard_admin_via_attached_policy"
 BROAD_GRANT_STATE = "broad_service_wildcard_grant"
 
+# The finding ids broad_grant_findings can produce. data/remediations.yaml has an
+# entry for each, and tests/test_remediations.py reads this list.
+ADMIN_VIA_ATTACHED_ID = ADMIN_VIA_ATTACHED_STATE.upper()
+BROAD_GRANT_ID = BROAD_GRANT_STATE.upper()
+BROAD_GRANT_RULE_IDS = [ADMIN_VIA_ATTACHED_ID, BROAD_GRANT_ID]
+
 # Services whose wildcard is worth a finding on its own. Deliberately not "any
 # service": `logs:*` or `cloudwatch:*` is untidy, not a route to the data.
 BROAD_GRANT_SERVICES = [
@@ -455,7 +461,7 @@ def broad_grant_findings(resource, attached=None):
             return []
 
         return [{
-            "rule_id": ADMIN_VIA_ATTACHED_STATE.upper(),
+            "rule_id": ADMIN_VIA_ATTACHED_ID,
             "state": ADMIN_VIA_ATTACHED_STATE,
             "severity": "critical",
             "services": [WILDCARD]
@@ -469,7 +475,7 @@ def broad_grant_findings(resource, attached=None):
         return []
 
     return [{
-        "rule_id": BROAD_GRANT_STATE.upper(),
+        "rule_id": BROAD_GRANT_ID,
         "state": BROAD_GRANT_STATE,
         "severity": "high",
         "services": services

@@ -1,12 +1,15 @@
 """One command from normalized resources to ranked attack paths."""
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from attack_path.exporter import (
     DEFAULT_INDUSTRY,
     STEPS_PATH,
     build_export,
+    build_steps,
+    source_id_for,
     technique_index,
     write_export,
     write_steps
@@ -20,10 +23,12 @@ from attack_path.scoring import (
     ATTACK_LEVEL_HIGH,
     select_high_risk
 )
+from risk_scoring.integration.pipeline_adapter import score_pipeline_paths
 from main import INFRA_OUTPUT_PATH, build_infra_model, save_infra_model
 from attack_path.renderer import DOT_PATH, MERMAID_PATH, write_dot, write_mermaid
 from security_state_graph.state_graph import (
-    build_state_graph,
+    SecurityStateGraph,
+    evaluate_findings_with_errors,
     write_state_graph
 )
 
@@ -36,6 +41,93 @@ OUTPUT_PATH = BASE_DIR / "output" / "attack_paths.json"
 
 # GRAPH_JSON_PATH, MERMAID_PATH and DOT_PATH are not restated here the way
 # the three paths above are: each is defined once, by the module that writes it.
+
+
+@dataclass(frozen=True)
+class Analysis:
+    """Everything one run of the pipeline produced, held in memory.
+
+    `selected` is the prefix of `paths` at or above the minimum level, and
+    `records` is `selected` in the export vocabulary. `steps` keeps every path,
+    as attack_path_steps.json does. `risk` is the contextual risk model's
+    assessment of every path (risk_scoring/), in the order of `paths`; it is a
+    second opinion and does not change the ranking, the levels or the export.
+    """
+
+    infra: object
+    findings: list
+    evaluation_errors: list
+    state_graph: SecurityStateGraph
+    attack_graph: object
+    paths: list
+    selected: list
+    records: list
+    steps: list
+    risk: list
+
+
+def analyze(
+    infra,
+    rules_path=RULES_PATH,
+    industry=DEFAULT_INDUSTRY,
+    min_level=ATTACK_LEVEL_HIGH
+):
+    """Every stage after the infrastructure model, with no file written.
+
+    run_pipeline calls this and then writes the artifacts; the app calls it and
+    keeps the result. One composition, so the two cannot drift apart on which
+    findings, paths or records an account has.
+    """
+
+    # 1. Findings: the rule engine's plus privilege escalation, and the rules
+    #    that raised, which a terminal run only prints.
+    findings, evaluation_errors = evaluate_findings_with_errors(
+        infra,
+        rules_path
+    )
+
+    state_graph = SecurityStateGraph(infra, findings)
+
+    # 2. The attack graph layer: apply data/attack_transitions.yaml to the state
+    #    graph. Its nodes are attacker states, not resources, so a resource
+    #    reached holding different facts is a different node with different
+    #    actions available.
+    attack_graph = build_attack_graph(state_graph)
+
+    # 3. Rank the attack paths. Same ruleset, so the conditions the search
+    #    enforces are the conditions the attack graph states.
+    paths = find_attack_paths(state_graph)
+
+    # 4. Select the high-risk paths, then translate into the export vocabulary.
+    #    The export is what the scenario generator reads, so the filter belongs
+    #    here. The steps keep every path, because that is the record of what the
+    #    search actually found.
+    selected = select_high_risk(paths, min_level)
+
+    records = build_export(
+        state_graph,
+        selected,
+        technique_index(rules_path),
+        industry
+    )
+
+    return Analysis(
+        infra=infra,
+        findings=findings,
+        evaluation_errors=evaluation_errors,
+        state_graph=state_graph,
+        attack_graph=attack_graph,
+        paths=paths,
+        selected=selected,
+        records=records,
+        steps=build_steps(paths),
+        risk=score_pipeline_paths(
+            state_graph,
+            paths,
+            infra,
+            [source_id_for(rank) for rank in range(1, len(paths) + 1)]
+        )
+    )
 
 
 def count_findings(state_graph):
@@ -169,64 +261,44 @@ def run_pipeline(
     """Run every stage and write all four artifacts. Returns
     (state_graph, paths, records)."""
 
-    # 1. Build the joined graph. The infra model is built on the way, and saved,
-    #    so the connection graph is an artifact of the pipeline rather than
-    #    something only `python3 main.py` ever produces.
+    # 1. Build the infrastructure model, and save it, so the connection graph
+    #    is an artifact of the pipeline rather than something only
+    #    `python3 main.py` ever produces.
     infra = build_infra_model(infra_path)
     save_infra_model(INFRA_OUTPUT_PATH, infra)
     infra_written = INFRA_OUTPUT_PATH
 
-    state_graph = build_state_graph(
-        infra_path,
-        rules_path,
-        infra=infra
-    )
+    # 2. Every stage after it, in memory. See analyze.
+    result = analyze(infra, rules_path, industry, min_level)
 
-    # 2. Write the graph itself — one file per block
+    state_graph = result.state_graph
+    attack_graph = result.attack_graph
+    paths = result.paths
+    records = result.records
+
+    # 3. Write the graph itself, one file per block, and the attack graph as its
+    #    own artifact: it is a stage of the architecture and not an
+    #    implementation detail of path finding.
     graph_written = write_state_graph(state_graph, graph_files)
-
-    # 3. The attack graph layer: apply data/attack_transitions.yaml to the state
-    #    graph. Its nodes are attacker states, not resources, so a resource
-    #    reached holding different facts is a different node with different
-    #    actions available. Written as its own artifact because it is a stage of
-    #    the architecture and not an implementation detail of path finding.
-    attack_graph = build_attack_graph(state_graph)
     attack_graph_written = write_attack_graph(attack_graph, attack_graph_files)
 
-    # 4. Rank the attack paths. Same ruleset, so the conditions the search
-    #    enforces are the conditions the attack graph states.
-    paths = find_attack_paths(state_graph)
-
-    # 5. Draw the graph, twice
+    # 4. Draw the graph, twice
     mermaid_written = write_mermaid(state_graph, paths, mermaid_path)
     dot_written = write_dot(state_graph, paths, dot_path)
 
-    # 6. Select the high-risk paths, then translate into the export vocabulary.
-    #    The export is what the scenario generator reads, so the filter belongs
-    #    here. attack_path_steps.json below keeps every path, because that is the
-    #    record of what the search actually found.
-    selected = select_high_risk(paths, min_level)
-
-    records = build_export(
-        state_graph,
-        selected,
-        technique_index(rules_path),
-        industry
-    )
-
-    # 7. Write the cross-repository contract
+    # 5. Write the cross-repository contract
     wrote = bool(records) or existing_export_records(output_path) == 0
 
     if wrote:
         write_export(records, output_path)
 
-    # 7b. And the per-hop conditions, which the seven-key contract has no room
+    # 5b. And the per-hop conditions, which the seven-key contract has no room
     #     for. Written unconditionally: unlike the export, nothing downstream
     #     depends on it, so an empty file is a true statement rather than a
     #     regression that overwrote a good one.
     steps_written = write_steps(paths, steps_path)
 
-    # 8. Report every stage, and every file, on one screen
+    # 6. Report every stage, and every file, on one screen
     summarize(
         state_graph,
         paths,
